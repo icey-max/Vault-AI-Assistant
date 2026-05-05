@@ -1,12 +1,80 @@
+# Dependencies
 node_modules/
+
+# Build and release artifacts
 main.js
+main.js.map
+*.zip
+*.tgz
+*.tar.gz
+dist/
+build/
+coverage/
+
+# Secrets and local environment
 .env
 .env.*
+.envrc
+*.local
+
+# Local Obsidian development vaults
 .obsidian-test-vault
+.obsidian/
+*.vault/
+
+# Local Codex/GSD/agent artifacts
 .planning/
 .codex/
 .agents/
+.claude/
+.cursor/
+.gemini/
+.roo/
+.aider*
+.mcp.json
+CLAUDE.md
+AGENTS.md
 User_share/
+
+# Local screenshots and captured media
 /copilot.png
 /copilotwhen@.png
+*.png
+*.jpg
+*.jpeg
+*.gif
 *.webm
+*.mp4
+*.mov
+*.avif
+*.heic
+
+# Private keys, tokens, and local data stores
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cert
+*.secret
+secrets.*
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs and diagnostics
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS/editor/cache files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+.cache/
+.eslintcache
