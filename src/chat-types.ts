@@ -42,6 +42,7 @@ export interface ChatMarkdownAttachment {
   label: string;
   mode?: ContextAttachmentMode;
   targetType?: OperationTargetType;
+  automatic?: boolean;
 }
 
 export interface ChatImageAttachment {

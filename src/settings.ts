@@ -21,6 +21,7 @@ export interface VaultAIAssistantSettings {
   anthropicSecretName: string;
   anthropicModel: string;
   systemPromptPresetId: SystemPromptPresetId;
+  autoAttachActiveFileContext: boolean;
   chatHistoryRetentionDays: ChatHistoryRetentionDays;
   maxOutputTokens: number;
 }
@@ -46,6 +47,7 @@ export const DEFAULT_SETTINGS: VaultAIAssistantSettings = {
   anthropicSecretName: "",
   anthropicModel: "claude-sonnet-4-6",
   systemPromptPresetId: DEFAULT_SYSTEM_PROMPT_PRESET_ID,
+  autoAttachActiveFileContext: false,
   chatHistoryRetentionDays: null,
   maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS
 };
@@ -137,6 +139,7 @@ export function normalizeSettings(settings: VaultAIAssistantSettings): VaultAIAs
   normalized.systemPromptPresetId = normalizeSystemPromptPresetId(
     normalized.systemPromptPresetId
   );
+  normalized.autoAttachActiveFileContext = normalized.autoAttachActiveFileContext === true;
   normalized.chatHistoryRetentionDays = normalizeChatHistoryRetentionDays(
     normalized.chatHistoryRetentionDays
   );
@@ -206,7 +209,27 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
     });
 
     this.addResponseSection();
+    this.addContextSection();
     this.addChatHistorySection();
+  }
+
+  private addContextSection(): void {
+    const heading = this.containerEl.createEl("h3", { text: "Context" });
+    heading.addClass("vault-ai-assistant-settings-heading");
+
+    new Setting(this.containerEl)
+      .setName("Auto attach active note")
+      .setDesc(
+        "When enabled, each message includes the active markdown note as readable context and uses that note's folder as the default edit target."
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.autoAttachActiveFileContext)
+          .onChange(async (value) => {
+            this.plugin.settings.autoAttachActiveFileContext = value;
+            await this.plugin.saveSettings();
+          });
+      });
   }
 
   private addResponseSection(): void {

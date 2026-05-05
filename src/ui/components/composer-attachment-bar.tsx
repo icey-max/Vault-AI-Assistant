@@ -180,8 +180,7 @@ function ContextChip({
   badgeLabel: string;
   onRemove: (source: ContextSource) => void;
 }): React.ReactElement {
-  const estimatedTokens = source.files.reduce((total, file) => total + file.estimatedTokens, 0);
-  const title = `${source.path} · ${source.files.length} ${source.files.length === 1 ? "file" : "files"} · ${estimatedTokens} est. tokens`;
+  const title = `${source.path} · ${source.files.length} ${source.files.length === 1 ? "file" : "files"}`;
 
   return (
     <div className="vault-ai-assistant-context-chip vault-ai-assistant-context-read-chip" title={title}>
@@ -190,18 +189,20 @@ function ContextChip({
           <span className="vault-ai-assistant-context-chip-icon" aria-hidden="true">
             {source.type === "folder" ? <Folder size={16} strokeWidth={1.8} /> : <FileText size={16} strokeWidth={1.8} />}
           </span>
-          <button
-            type="button"
-            className="vault-ai-assistant-context-chip-remove"
-            aria-label={`Remove ${source.path} from context`}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onRemove(source);
-            }}
-          >
-            <X size={14} strokeWidth={1.8} aria-hidden="true" />
-          </button>
+          {!source.automatic ? (
+            <button
+              type="button"
+              className="vault-ai-assistant-context-chip-remove"
+              aria-label={`Remove ${source.path} from context`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onRemove(source);
+              }}
+            >
+              <X size={14} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+          ) : null}
         </span>
         <span className="vault-ai-assistant-context-path">{displayName}</span>
         <span className="vault-ai-assistant-context-meta">Context · sends content · {badgeLabel}</span>
@@ -243,18 +244,20 @@ function ScopeChip({
           <span className="vault-ai-assistant-context-chip-icon" aria-hidden="true">
             {target.type === "folder" ? <FolderKey size={16} strokeWidth={1.8} /> : <FileLock size={16} strokeWidth={1.8} />}
           </span>
-          <button
-            type="button"
-            className="vault-ai-assistant-context-chip-remove"
-            aria-label={`Remove ${target.path} from edit targets`}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onRemove(target);
-            }}
-          >
-            <X size={14} strokeWidth={1.8} aria-hidden="true" />
-          </button>
+          {!target.automatic ? (
+            <button
+              type="button"
+              className="vault-ai-assistant-context-chip-remove"
+              aria-label={`Remove ${target.path} from edit targets`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onRemove(target);
+              }}
+            >
+              <X size={14} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+          ) : null}
         </span>
         <span className="vault-ai-assistant-context-path">
           {target.path === "/" ? "Target /" : target.path}

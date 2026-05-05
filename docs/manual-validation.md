@@ -39,10 +39,11 @@ Open the test vault in Obsidian, enable community plugins, and enable Vault AI A
 ## Context and Edit Targets
 
 - [ ] Open a new chat and confirm the default edit target chip shows `Target /`.
+- [ ] Enable `Auto attach active note`, open a disposable markdown note, and confirm the composer shows that note as context with its folder as the default edit target.
 - [ ] Attach a disposable folder as an edit target and confirm target chips are visually distinct from context chips.
 - [ ] Confirm response metadata shows `Edit targets` for target-only paths.
-- [ ] Confirm context metadata does not count target-only folder files or estimated tokens.
-- [ ] Attach the same folder as readable `Context` and confirm `Context sent` shows file count and estimated tokens.
+- [ ] Confirm context metadata does not count target-only folder files.
+- [ ] Attach the same folder as readable `Context` and confirm `Context sent` shows file count without token estimates.
 - [ ] Ask for an edit to a target-only path and verify the proposal remains approval-gated with clear path review.
 
 ## Approval-gated Vault Operations

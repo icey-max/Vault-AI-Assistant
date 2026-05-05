@@ -8,6 +8,7 @@ This is an alpha release. Use it on a test vault first and review proposed file 
 
 - Chat with OpenAI or Anthropic models from inside Obsidian.
 - Attach notes, folders, the active note, and images as explicit request context.
+- Optionally auto-attach the active note and use its folder as the default edit target.
 - Add edit target hints so the assistant knows where you intend vault changes to go without sending hidden folder contents as readable context.
 - Review approval-gated vault operation proposals before writes happen.
 - Supported approved operations include creating folders, creating notes, modifying notes, appending notes, deleting notes/folders, moving or renaming notes/folders, and copying notes.
@@ -17,7 +18,7 @@ This is an alpha release. Use it on a test vault first and review proposed file 
 
 ## Safety Model
 
-Vault AI Assistant does not independently search or read your whole vault. The model receives only the context you explicitly attach, prior chat history included in the request, image attachments you send, and non-readable edit target path hints.
+Vault AI Assistant does not independently search or read your whole vault. The model receives only the context you explicitly attach, the active note if you enable automatic active-note context, prior chat history included in the request, image attachments you send, and non-readable edit target path hints.
 
 Vault writes are approval-gated. When the assistant wants to change the vault, it creates a proposal card first. You can inspect the paths, previews, and diffs before applying or rejecting operations. No proposed operation is written until you approve it.
 
@@ -37,6 +38,7 @@ The data sent to the selected provider may include:
 - Your current chat message.
 - Prior chat messages needed for conversation continuity.
 - Contents of notes or folders you explicitly attach as readable context.
+- Contents of the active markdown note when `Auto attach active note` is enabled.
 - Image attachments you explicitly send.
 - Edit target path hints, such as folder or note paths, without hidden file contents unless those files are also attached as context.
 - Proposed operation history paths and statuses when needed for follow-up grounding.

@@ -19,6 +19,11 @@ import {
 type SourceFileType = Extract<ContextSourceType, "current-note" | "note">;
 export type RestorableContextSource = ChatMarkdownAttachment;
 
+interface ActiveFileContextOptions {
+  includeActiveFile?: boolean;
+  includeActiveFileDirectory?: boolean;
+}
+
 export class VaultContextManager {
   private app: App;
   private sources: ContextSource[] = [];
@@ -30,18 +35,18 @@ export class VaultContextManager {
     this.onChange = onChange;
   }
 
-  getSources(): ContextSource[] {
-    return this.sources.map((source) => ({
-      ...source,
-      files: source.files.map((file) => ({
-        ...file,
-        sourceIds: file.sourceIds.slice()
-      }))
-    }));
+  getSources(options: ActiveFileContextOptions = {}): ContextSource[] {
+    const sources = this.cloneSources(this.sources);
+    if (!options.includeActiveFile) {
+      return sources;
+    }
+
+    const activeFileSource = this.createActiveFileContextSource(sources);
+    return activeFileSource ? [activeFileSource, ...sources] : sources;
   }
 
-  getIncludedFiles(): ResolvedContextFile[] {
-    const sourceFiles = this.sources.reduce<ResolvedContextFile[]>((files, source) => {
+  getIncludedFiles(options: ActiveFileContextOptions = {}): ResolvedContextFile[] {
+    const sourceFiles = this.getSources(options).reduce<ResolvedContextFile[]>((files, source) => {
       return files.concat(source.files);
     }, []);
 
@@ -50,8 +55,8 @@ export class VaultContextManager {
     );
   }
 
-  getSummary() {
-    return summarizeContext(this.getIncludedFiles());
+  getSummary(options: ActiveFileContextOptions = {}) {
+    return summarizeContext(this.getIncludedFiles(options));
   }
 
   getRestorableSources(): RestorableContextSource[] {
@@ -67,31 +72,70 @@ export class VaultContextManager {
       }));
   }
 
-  getTargetSources(): OperationTargetSource[] {
-    return this.targetSources
+  getTargetSources(options: ActiveFileContextOptions = {}): OperationTargetSource[] {
+    const sources = this.targetSources
       .filter((source) => !isAssistantOwnedPath(source.path))
       .map((source) => ({ ...source }));
+
+    if (!options.includeActiveFileDirectory || sources.length > 0) {
+      return sources;
+    }
+
+    const activeFileTarget = this.createActiveFileDirectoryTargetSource();
+    return activeFileTarget ? [activeFileTarget] : sources;
   }
 
-  getOperationTargetScope(): OperationTargetScope {
+  getOperationTargetScope(options: ActiveFileContextOptions = {}): OperationTargetScope {
     return {
       ...createDefaultOperationTargetScope(),
-      sources: this.getTargetSources()
+      sources: this.getTargetSources(options)
     };
   }
 
-  getRestorableAttachments(): RestorableContextSource[] {
-    return this.getRestorableSources().concat(
-      this.targetSources.map((source) => ({
-        kind: "markdown",
-        id: source.id,
-        sourceType: source.type === "folder" ? "folder" : "note",
-        path: source.path,
-        label: source.label,
-        mode: "target",
-        targetType: source.type
-      }))
-    );
+  getRestorableAttachments(options: ActiveFileContextOptions = {}): RestorableContextSource[] {
+    const contextAttachments = this.getRestorableSources();
+    const targetAttachments: RestorableContextSource[] = this.getTargetSources().map((source) => ({
+      kind: "markdown",
+      id: source.id,
+      sourceType: source.type === "folder" ? "folder" : "note",
+      path: source.path,
+      label: source.label,
+      mode: "target",
+      targetType: source.type
+    }) satisfies RestorableContextSource);
+
+    if (options.includeActiveFile) {
+      const activeFileSource = this.createActiveFileContextSource(this.cloneSources(this.sources));
+      if (activeFileSource) {
+        contextAttachments.push({
+          kind: "markdown",
+          id: activeFileSource.id,
+          sourceType: activeFileSource.type,
+          path: activeFileSource.path,
+          label: activeFileSource.label,
+          mode: "context",
+          automatic: true
+        });
+      }
+    }
+
+    if (options.includeActiveFileDirectory && this.targetSources.length === 0) {
+      const activeFileTarget = this.createActiveFileDirectoryTargetSource();
+      if (activeFileTarget) {
+        targetAttachments.push({
+          kind: "markdown",
+          id: activeFileTarget.id,
+          sourceType: activeFileTarget.type === "folder" ? "folder" : "note",
+          path: activeFileTarget.path,
+          label: activeFileTarget.label,
+          mode: "target",
+          targetType: activeFileTarget.type,
+          automatic: true
+        });
+      }
+    }
+
+    return contextAttachments.concat(targetAttachments);
   }
 
   restoreSources(sources: RestorableContextSource[]): void {
@@ -100,6 +144,10 @@ export class VaultContextManager {
 
     for (const source of sources) {
       if (isAssistantOwnedPath(source.path)) {
+        continue;
+      }
+
+      if (source.automatic) {
         continue;
       }
 
@@ -285,10 +333,10 @@ export class VaultContextManager {
     this.emitChange();
   }
 
-  async buildContextPackage(): Promise<ContextPackage> {
+  async buildContextPackage(options: ActiveFileContextOptions = {}): Promise<ContextPackage> {
     const packageFiles: ContextPackageFile[] = [];
 
-    for (const resolvedFile of this.getIncludedFiles()) {
+    for (const resolvedFile of this.getIncludedFiles(options)) {
       const file = this.app.vault.getFileByPath(resolvedFile.path);
       if (!file || !this.isMarkdownFile(file) || isAssistantOwnedPath(file.path)) {
         continue;
@@ -377,6 +425,64 @@ export class VaultContextManager {
 
   private isMarkdownFile(file: TFile): boolean {
     return file.extension.toLowerCase() === "md";
+  }
+
+  private cloneSources(sources: ContextSource[]): ContextSource[] {
+    return sources.map((source) => ({
+      ...source,
+      files: source.files.map((file) => ({
+        ...file,
+        sourceIds: file.sourceIds.slice()
+      }))
+    }));
+  }
+
+  private createActiveFileContextSource(existingSources: ContextSource[]): ContextSource | null {
+    const activeFile = this.getActiveMarkdownFile();
+    if (!activeFile || this.isPathIncludedInSources(existingSources, activeFile.path)) {
+      return null;
+    }
+
+    const sourceId = this.getSourceId("current-note", activeFile.path);
+    return {
+      id: sourceId,
+      type: "current-note",
+      path: activeFile.path,
+      label: activeFile.path,
+      expanded: false,
+      files: [this.createResolvedFile(activeFile, sourceId)],
+      automatic: true
+    };
+  }
+
+  private createActiveFileDirectoryTargetSource(): OperationTargetSource | null {
+    const activeFile = this.getActiveMarkdownFile();
+    if (!activeFile) {
+      return null;
+    }
+
+    const folderPath = normalizeTargetPath(activeFile.parent?.path ?? "/");
+    return {
+      id: this.getTargetSourceId("folder", folderPath),
+      type: "folder",
+      path: folderPath,
+      label: folderPath,
+      explicit: false,
+      automatic: true
+    };
+  }
+
+  private getActiveMarkdownFile(): TFile | null {
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile || !this.isMarkdownFile(activeFile) || isAssistantOwnedPath(activeFile.path)) {
+      return null;
+    }
+
+    return activeFile;
+  }
+
+  private isPathIncludedInSources(sources: ContextSource[], path: string): boolean {
+    return sources.some((source) => source.files.some((file) => file.path === path));
   }
 
   private getSourceId(type: ContextSourceType, path: string): string {

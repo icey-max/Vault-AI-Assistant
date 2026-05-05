@@ -18,6 +18,7 @@ export interface ContextSource {
   label: string;
   expanded: boolean;
   files: ResolvedContextFile[];
+  automatic?: boolean;
 }
 
 export interface ContextSummary {
@@ -47,6 +48,7 @@ export interface OperationTargetSource {
   path: string;
   label: string;
   explicit: boolean;
+  automatic?: boolean;
 }
 
 export interface OperationTargetScope {

@@ -42,6 +42,7 @@ export default class VaultAIAssistantPlugin extends Plugin {
     this.addRibbonIcon("message-square", "Open Vault AI Assistant", () => {
       void this.activateView();
     });
+    this.registerEvent(this.app.workspace.on("file-open", () => this.refreshAssistantViews()));
     console.log("Loading Vault AI Assistant");
   }
 

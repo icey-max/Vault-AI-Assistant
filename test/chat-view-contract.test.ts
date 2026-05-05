@@ -24,7 +24,7 @@ test("assistant chat view keeps required Phase 3 copy", () => {
     "vault-ai-assistant-message-markdown",
     "vault-ai-assistant-message-copy",
     "markdown-rendered",
-    "Only explicitly attached markdown files were included.",
+    "Only shown markdown files were included.",
     "Autosaved"
   ]) {
     assert.match(source, new RegExp(escapeRegExp(text)));
@@ -117,13 +117,12 @@ test("assistant chat view keeps required Phase 3.5 chat action contract", () => 
     "Stop response\" : \"Send",
     "Stop response",
     "Context used",
-    "Estimated:",
     "formatTokenUsageForDisplay",
     "captureMessageScroll",
     "restoreMessageScroll",
     "shouldStickToBottom",
     "requestAnimationFrame",
-    "Only explicitly attached markdown files were included.",
+    "Only shown markdown files were included.",
     " · ",
     "Stopped"
   ]) {
@@ -464,6 +463,8 @@ test("assistant chat view keeps required Phase 6 prompt settings contract", () =
 
   for (const text of [
     "systemPromptPresetId",
+    "autoAttachActiveFileContext",
+    "Auto attach active note",
     "DEFAULT_SYSTEM_PROMPT_PRESET_ID",
     "normalizeSystemPromptPresetId",
     "chatHistoryRetentionDays",
@@ -756,10 +757,12 @@ test("assistant chat view keeps required Phase 8 edit target context contract", 
     "Context",
     "Target",
     "aria-pressed",
-    "getOperationTargetScope()",
+    "getOperationTargetScope",
     "operationTargets",
     "operationTargetSnapshot",
     "getRestorableAttachments",
+    "autoAttachActiveFileContext",
+    "includeActiveFileDirectory",
     "renderTargetChip",
     "Target /",
     "Context sent",

@@ -20,7 +20,6 @@ import {
   type ContextAttachmentMode,
   type ContextPackageFile,
   evaluateContextWarnings,
-  formatEstimatedTokens,
   type OperationTargetSnapshot,
   type OperationTargetSource,
   type OperationTargetScope
@@ -505,31 +504,32 @@ export class VaultAIAssistantView extends ItemView {
     hasOperationTargetSnapshot = false
   ): void {
     const label = hasOperationTargetSnapshot ? "Context sent" : "Context used";
+    const fileCountLabel = this.formatContextFileCount(snapshot.fileCount);
     const disclosure = container.createEl("details", {
       cls: "vault-ai-assistant-context-used"
     });
     disclosure.createEl("summary", {
-      text: `${label} · Estimated: ${snapshot.fileCount} ${snapshot.fileCount === 1 ? "file" : "files"}, ${formatEstimatedTokens(snapshot.totalEstimatedTokens)}`
+      text: `${label} · ${fileCountLabel}`
     });
 
     const details = disclosure.createDiv({ cls: "vault-ai-assistant-context-used-details" });
     details.createDiv({
       cls: "vault-ai-assistant-context-meta",
-      text: `${snapshot.fileCount} ${snapshot.fileCount === 1 ? "file" : "files"} · ${formatEstimatedTokens(snapshot.totalEstimatedTokens)}`
+      text: fileCountLabel
     });
 
     if (snapshot.files.length > 0) {
       const files = details.createEl("ul", { cls: "vault-ai-assistant-folder-files" });
       for (const file of snapshot.files) {
         files.createEl("li", {
-          text: `${file.path} · ${formatEstimatedTokens(file.estimatedTokens)} · ${file.sourceIds.join(", ")}`
+          text: `${file.path} · ${file.sourceIds.join(", ")}`
         });
       }
     }
 
     details.createDiv({
       cls: "vault-ai-assistant-context-footer",
-      text: "Only explicitly attached markdown files were included."
+      text: "Only shown markdown files were included."
     });
   }
 
@@ -889,6 +889,7 @@ export class VaultAIAssistantView extends ItemView {
       providerConfig.provider,
       providerConfig.model
     );
+    const activeFileContextOptions = this.getActiveFileContextOptions();
     const root = createRoot(composer);
     this.reactRoots.push(root);
     root.render(
@@ -900,8 +901,8 @@ export class VaultAIAssistantView extends ItemView {
         helperMessage: this.composerHelperMessage,
         helperIsError: this.composerHelperIsError,
         scopeMode: this.composerScopeMode,
-        contextSources: this.plugin.contextManager.getSources(),
-        targetSources: this.plugin.contextManager.getTargetSources(),
+        contextSources: this.plugin.contextManager.getSources(activeFileContextOptions),
+        targetSources: this.plugin.contextManager.getTargetSources(activeFileContextOptions),
         imageAttachments: this.imageAttachments,
         modelSelector: this.getComposerModelSelectorState(),
         selectedModelSupportsImages,
@@ -1334,6 +1335,14 @@ export class VaultAIAssistantView extends ItemView {
     return value.trim().length > 0 && this.activeAbortController === null;
   }
 
+  private getActiveFileContextOptions() {
+    const enabled = this.plugin.settings.autoAttachActiveFileContext;
+    return {
+      includeActiveFile: enabled,
+      includeActiveFileDirectory: enabled
+    };
+  }
+
   private async sendMessage(content: string): Promise<void> {
     const userMessage = content.trim();
     if (!userMessage || this.activeAbortController) {
@@ -1366,12 +1375,15 @@ export class VaultAIAssistantView extends ItemView {
     let operationTargets: OperationTargetScope;
     let operationTargetSnapshot;
     let systemPrompt: string;
+    const activeFileContextOptions = this.getActiveFileContextOptions();
     try {
       persistedImages = await this.persistDraftImageAttachments();
       imageAttachments = await this.createRequestImageAttachments(persistedImages);
-      context = await this.plugin.contextManager.buildContextPackage();
+      context = await this.plugin.contextManager.buildContextPackage(activeFileContextOptions);
       contextSnapshot = createContextSnapshot(context);
-      operationTargets = this.plugin.contextManager.getOperationTargetScope();
+      operationTargets = this.plugin.contextManager.getOperationTargetScope(
+        activeFileContextOptions
+      );
       operationTargetSnapshot = createOperationTargetSnapshot(operationTargets);
     } catch (error) {
       this.composerHelperMessage = this.formatUnexpectedRequestError(error);
@@ -1398,7 +1410,7 @@ export class VaultAIAssistantView extends ItemView {
     const isFirstConversationMessage = previousMessages.length === 0;
     const conversationId = activeConversation.id;
     const messageAttachments: ChatAttachment[] = [
-      ...this.plugin.contextManager.getRestorableAttachments(),
+      ...this.plugin.contextManager.getRestorableAttachments(activeFileContextOptions),
       ...persistedImages
     ];
     const chatUserMessage = this.stripMessageAttachmentTokens(userMessage, messageAttachments);
@@ -1834,26 +1846,24 @@ export class VaultAIAssistantView extends ItemView {
       cls: "vault-ai-assistant-context-chip vault-ai-assistant-context-read-chip"
     });
     const body = chip.createDiv({ cls: "vault-ai-assistant-context-chip-summary" });
-    const estimatedTokens = source.files.reduce(
-      (total, file) => total + file.estimatedTokens,
-      0
-    );
-    chip.title = `${source.path} · ${source.files.length} ${source.files.length === 1 ? "file" : "files"} · ${formatEstimatedTokens(estimatedTokens)}`;
+    chip.title = `${source.path} · ${this.formatContextFileCount(source.files.length)}`;
 
     const iconShell = body.createSpan({ cls: "vault-ai-assistant-context-chip-icon-shell" });
     const icon = iconShell.createSpan({ cls: "vault-ai-assistant-context-chip-icon" });
     setIcon(icon, source.type === "folder" ? "folder" : "file-text");
-    const remove = iconShell.createEl("button", {
-      cls: "vault-ai-assistant-context-chip-remove"
-    });
-    remove.type = "button";
-    setIcon(remove, "x");
-    remove.setAttr("aria-label", `Remove ${source.path} from context`);
-    remove.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      this.plugin.contextManager.removeSource(source.id);
-    });
+    if (!source.automatic) {
+      const remove = iconShell.createEl("button", {
+        cls: "vault-ai-assistant-context-chip-remove"
+      });
+      remove.type = "button";
+      setIcon(remove, "x");
+      remove.setAttr("aria-label", `Remove ${source.path} from context`);
+      remove.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.plugin.contextManager.removeSource(source.id);
+      });
+    }
     body.createSpan({
       cls: "vault-ai-assistant-context-path",
       text: this.getSourceDisplayName(source)
@@ -1894,17 +1904,19 @@ export class VaultAIAssistantView extends ItemView {
     const iconShell = body.createSpan({ cls: "vault-ai-assistant-context-chip-icon-shell" });
     const icon = iconShell.createSpan({ cls: "vault-ai-assistant-context-chip-icon" });
     setIcon(icon, target.type === "folder" ? "folder-key" : "file-lock");
-    const remove = iconShell.createEl("button", {
-      cls: "vault-ai-assistant-context-chip-remove"
-    });
-    remove.type = "button";
-    setIcon(remove, "x");
-    remove.setAttr("aria-label", `Remove ${target.path} from edit targets`);
-    remove.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      this.plugin.contextManager.removeTargetSource(target.id);
-    });
+    if (!target.automatic) {
+      const remove = iconShell.createEl("button", {
+        cls: "vault-ai-assistant-context-chip-remove"
+      });
+      remove.type = "button";
+      setIcon(remove, "x");
+      remove.setAttr("aria-label", `Remove ${target.path} from edit targets`);
+      remove.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.plugin.contextManager.removeTargetSource(target.id);
+      });
+    }
     body.createSpan({
       cls: "vault-ai-assistant-context-path",
       text: target.path === "/" ? "Target /" : target.path
@@ -2101,8 +2113,9 @@ export class VaultAIAssistantView extends ItemView {
 
   private renderContextTray(container: HTMLElement): void {
     const tray = container.createDiv({ cls: "vault-ai-assistant-context-tray" });
-    const sources = this.plugin.contextManager.getSources();
-    const targets = this.plugin.contextManager.getTargetSources();
+    const activeFileContextOptions = this.getActiveFileContextOptions();
+    const sources = this.plugin.contextManager.getSources(activeFileContextOptions);
+    const targets = this.plugin.contextManager.getTargetSources(activeFileContextOptions);
 
     tray.createEl("h3", { text: "Context sent" });
     if (sources.length === 0) {
@@ -2117,15 +2130,15 @@ export class VaultAIAssistantView extends ItemView {
       }
     }
 
-    const summary = this.plugin.contextManager.getSummary();
+    const summary = this.plugin.contextManager.getSummary(activeFileContextOptions);
     tray.createDiv({
       cls: "vault-ai-assistant-context-meta",
-      text: `${summary.fileCount} ${summary.fileCount === 1 ? "file" : "files"} · ${formatEstimatedTokens(summary.totalEstimatedTokens)}`
+      text: this.formatContextFileCount(summary.fileCount)
     });
     this.renderContextWarnings(tray);
     tray.createDiv({
       cls: "vault-ai-assistant-context-footer",
-      text: "Only attached markdown files will be included."
+      text: "Only shown markdown files will be included."
     });
 
     tray.createEl("h3", { text: "Edit targets" });
@@ -2149,7 +2162,9 @@ export class VaultAIAssistantView extends ItemView {
   }
 
   private renderContextWarnings(container: HTMLElement): void {
-    const warnings = evaluateContextWarnings(this.plugin.contextManager.getIncludedFiles());
+    const warnings = evaluateContextWarnings(
+      this.plugin.contextManager.getIncludedFiles(this.getActiveFileContextOptions())
+    );
     if (warnings.length === 0) {
       return;
     }
@@ -2193,23 +2208,21 @@ export class VaultAIAssistantView extends ItemView {
     });
     heading.createSpan({ cls: "vault-ai-assistant-context-path", text: source.path });
 
-    const estimatedTokens = source.files.reduce(
-      (total, file) => total + file.estimatedTokens,
-      0
-    );
     rowMain.createDiv({
       cls: "vault-ai-assistant-context-meta",
-      text: `${source.files.length} ${source.files.length === 1 ? "markdown file" : "markdown files"} · ${formatEstimatedTokens(estimatedTokens)}`
+      text: `${source.files.length} ${source.files.length === 1 ? "markdown file" : "markdown files"}`
     });
 
-    const remove = row.createEl("button", {
-      cls: "vault-ai-assistant-context-remove",
-      text: "Remove"
-    });
-    remove.type = "button";
-    remove.addEventListener("click", () => {
-      this.plugin.contextManager.removeSource(source.id);
-    });
+    if (!source.automatic) {
+      const remove = row.createEl("button", {
+        cls: "vault-ai-assistant-context-remove",
+        text: "Remove"
+      });
+      remove.type = "button";
+      remove.addEventListener("click", () => {
+        this.plugin.contextManager.removeSource(source.id);
+      });
+    }
 
     if (source.type === "folder" && source.expanded) {
       const files = rowMain.createEl("ul", { cls: "vault-ai-assistant-folder-files" });
@@ -2225,6 +2238,10 @@ export class VaultAIAssistantView extends ItemView {
 
   private getModelLabel(provider: ProviderId, model: string): string {
     return MODEL_OPTIONS[provider].find((option) => option.value === model)?.label ?? model;
+  }
+
+  private formatContextFileCount(fileCount: number): string {
+    return `${fileCount} ${fileCount === 1 ? "file" : "files"}`;
   }
 
   private getSourceLabel(source: ContextSource): string {
