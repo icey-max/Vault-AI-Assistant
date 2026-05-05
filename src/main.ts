@@ -1,0 +1,112 @@
+import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
+import {
+  VAULT_AI_ASSISTANT_VIEW_TYPE,
+  VaultAIAssistantView
+} from "./assistant-view";
+import { ChatStore } from "./chat-store";
+import { VaultContextManager } from "./context";
+import {
+  DEFAULT_SETTINGS,
+  normalizeSettings,
+  VaultAIAssistantSettings,
+  VaultAIAssistantSettingTab
+} from "./settings";
+import { ensureSystemPromptFiles } from "./system-prompts";
+import { VaultOperationExecutor } from "./vault-operation-executor";
+
+export default class VaultAIAssistantPlugin extends Plugin {
+  settings: VaultAIAssistantSettings;
+  contextManager: VaultContextManager;
+  chatStore: ChatStore;
+  operationExecutor: VaultOperationExecutor;
+
+  async onload(): Promise<void> {
+    await this.loadSettings();
+    await this.ensureEditableSystemPrompts();
+    this.contextManager = new VaultContextManager(this.app, () => this.refreshAssistantViews());
+    this.chatStore = new ChatStore(this.app.vault, () => this.refreshAssistantViews());
+    await this.pruneSavedChatHistory();
+    this.operationExecutor = new VaultOperationExecutor(this.app.vault, this.app.fileManager);
+    this.addSettingTab(new VaultAIAssistantSettingTab(this.app, this));
+    this.registerView(
+      VAULT_AI_ASSISTANT_VIEW_TYPE,
+      (leaf) => new VaultAIAssistantView(leaf, this)
+    );
+    this.addCommand({
+      id: "open-vault-ai-assistant",
+      name: "Open Vault AI Assistant",
+      callback: () => {
+        void this.activateView();
+      }
+    });
+    this.addRibbonIcon("message-square", "Open Vault AI Assistant", () => {
+      void this.activateView();
+    });
+    console.log("Loading Vault AI Assistant");
+  }
+
+  onunload(): void {
+    console.log("Unloading Vault AI Assistant");
+  }
+
+  async loadSettings(): Promise<void> {
+    this.settings = normalizeSettings(Object.assign({}, DEFAULT_SETTINGS, await this.loadData()));
+  }
+
+  async saveSettings(): Promise<void> {
+    await this.saveData(this.settings);
+    this.refreshAssistantViews();
+  }
+
+  async pruneSavedChatHistory(): Promise<void> {
+    if (!this.chatStore || this.settings.chatHistoryRetentionDays === null) {
+      return;
+    }
+
+    await this.chatStore.pruneSavedConversations(this.settings.chatHistoryRetentionDays);
+    this.refreshAssistantViews();
+  }
+
+  async ensureEditableSystemPrompts(): Promise<boolean> {
+    try {
+      await ensureSystemPromptFiles(this.app.vault);
+      return true;
+    } catch (error) {
+      console.error("Vault AI Assistant could not create system prompt files.", error);
+      return false;
+    }
+  }
+
+  async activateView(): Promise<void> {
+    let leaf: WorkspaceLeaf | null = this.app.workspace.getLeavesOfType(
+      VAULT_AI_ASSISTANT_VIEW_TYPE
+    )[0] ?? null;
+
+    if (!leaf) {
+      leaf = this.app.workspace.getRightLeaf(false);
+    }
+
+    if (!leaf) {
+      new Notice("Unable to open Vault AI Assistant view.");
+      return;
+    }
+
+    await leaf.setViewState({
+      type: VAULT_AI_ASSISTANT_VIEW_TYPE,
+      active: true
+    });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  openSettings(): void {
+    new Notice("Open Settings -> Community plugins -> Vault AI Assistant to configure providers.");
+  }
+
+  refreshAssistantViews(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(VAULT_AI_ASSISTANT_VIEW_TYPE)) {
+      if (leaf.view instanceof VaultAIAssistantView) {
+        leaf.view.render();
+      }
+    }
+  }
+}

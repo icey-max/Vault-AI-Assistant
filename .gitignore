@@ -1,0 +1,12 @@
+node_modules/
+main.js
+.env
+.env.*
+.obsidian-test-vault
+.planning/
+.codex/
+.agents/
+User_share/
+/copilot.png
+/copilotwhen@.png
+*.webm
