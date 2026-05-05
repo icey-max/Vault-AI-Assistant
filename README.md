@@ -97,7 +97,7 @@ npm run copy:plugin
 
 Then open Obsidian, enable community plugins, and enable Vault AI Assistant in the test vault.
 
-Before controlled alpha testing, run the checklist in `docs/alpha-validation.md`.
+Before controlled alpha or beta testing, run the checklist in `docs/manual-validation.md`.
 
 ## Release Assets
 
