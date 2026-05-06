@@ -3,7 +3,7 @@
   "name": "Vault AI Assistant",
   "version": "0.1.0",
   "minAppVersion": "1.11.4",
-  "description": "AI assistant for explicitly served Obsidian vault context with approval-gated vault actions.",
+  "description": "AI assistant for explicitly attached vault context with approval-gated vault actions.",
   "author": "icey-max",
   "isDesktopOnly": false
 }
