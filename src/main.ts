@@ -33,8 +33,8 @@ export default class VaultAIAssistantPlugin extends Plugin {
       (leaf) => new VaultAIAssistantView(leaf, this)
     );
     this.addCommand({
-      id: "open-vault-ai-assistant",
-      name: "Open Vault AI Assistant",
+      id: "open-assistant",
+      name: "Open assistant",
       callback: () => {
         void this.activateView();
       }
@@ -43,11 +43,6 @@ export default class VaultAIAssistantPlugin extends Plugin {
       void this.activateView();
     });
     this.registerEvent(this.app.workspace.on("file-open", () => this.refreshAssistantViews()));
-    console.log("Loading Vault AI Assistant");
-  }
-
-  onunload(): void {
-    console.log("Unloading Vault AI Assistant");
   }
 
   async loadSettings(): Promise<void> {

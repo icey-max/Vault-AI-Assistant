@@ -74,7 +74,7 @@ test("VaultOperationExecutor fills existing empty create_note targets", async ()
   assert.deepEqual(result, { ok: true });
   assert.equal(vault.files.get("Books/empty 1.md"), "# The Siren\n\nThe Siren is the ultimate seducer.");
   assert.equal(vault.createCalls, 0);
-  assert.equal(vault.modifyCalls, 1);
+  assert.equal(vault.processCalls, 1);
 });
 
 test("VaultOperationExecutor applies modify_note and append_note", async () => {
@@ -104,7 +104,7 @@ test("VaultOperationExecutor applies modify_note and append_note", async () => {
   assert.deepEqual(appendResult, { ok: true });
   assert.equal(vault.files.get("Notes/Existing.md"), "new");
   assert.equal(vault.files.get("Notes/Log.md"), "first\n- next");
-  assert.equal(vault.modifyCalls, 2);
+  assert.equal(vault.processCalls, 2);
 });
 
 test("VaultOperationExecutor rejects existing create targets and missing modify or append targets", async () => {
@@ -613,7 +613,7 @@ test("VaultOperationExecutor blocks modify_note when target changed since this p
     error: "Note changed since this proposal was created. Regenerate the proposal before applying."
   });
   assert.equal(vault.files.get("Notes/Existing.md"), "changed");
-  assert.equal(vault.modifyCalls, 0);
+  assert.equal(vault.processCalls, 0);
 });
 
 test("VaultOperationExecutor blocks stale modify_note and append_note baselines", async () => {
@@ -656,7 +656,7 @@ test("VaultOperationExecutor blocks stale modify_note and append_note baselines"
   });
   assert.equal(vault.files.get("Notes/Existing.md"), "changed");
   assert.equal(vault.files.get("Notes/Log.md"), "changed");
-  assert.equal(vault.modifyCalls, 0);
+  assert.equal(vault.processCalls, 0);
 });
 
 test("VaultOperationExecutor leaves rejected operation and non-pending operations as no-ops", async () => {
@@ -686,7 +686,7 @@ test("VaultOperationExecutor leaves rejected operation and non-pending operation
     error: "Operation is not pending."
   });
   assert.equal(vault.createCalls, 0);
-  assert.equal(vault.modifyCalls, 0);
+  assert.equal(vault.processCalls, 0);
   assert.deepEqual(vault.trashCalls, []);
   assert.equal(vault.files.size, 0);
 });
@@ -697,7 +697,7 @@ function createMockVault(initialFiles: Array<[string, string]> = []) {
   const createFolderCalls: string[] = [];
   const renameFileCalls: Array<{ path: string; newPath: string }> = [];
   let createCalls = 0;
-  let modifyCalls = 0;
+  let processCalls = 0;
   const trashCalls: Array<{ path: string; system: boolean }> = [];
   for (const path of files.keys()) {
     addParentFolders(folders, path);
@@ -709,8 +709,8 @@ function createMockVault(initialFiles: Array<[string, string]> = []) {
     get createCalls() {
       return createCalls;
     },
-    get modifyCalls() {
-      return modifyCalls;
+    get processCalls() {
+      return processCalls;
     },
     createFolderCalls,
     renameFileCalls,
@@ -731,9 +731,11 @@ function createMockVault(initialFiles: Array<[string, string]> = []) {
       files.set(path, data);
       return { path };
     },
-    async modify(file: { path: string }, data: string) {
-      modifyCalls += 1;
+    async process(file: { path: string }, fn: (data: string) => string) {
+      const data = fn(files.get(file.path) ?? "");
+      processCalls += 1;
       files.set(file.path, data);
+      return data;
     },
     async trash(file: { path: string }, system: boolean) {
       trashCalls.push({ path: file.path, system });

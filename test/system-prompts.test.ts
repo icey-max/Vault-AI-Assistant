@@ -87,7 +87,7 @@ test("ensureSystemPromptFiles updates old unedited scaffold prompt files", async
   await ensureSystemPromptFiles(vault.vault);
 
   assert.equal(vault.files.get(`${SYSTEM_PROMPT_FOLDER}/default-assistant.md`), DEFAULT_ASSISTANT_SYSTEM_PROMPT);
-  assert.deepEqual(vault.modifyCalls, [`${SYSTEM_PROMPT_FOLDER}/default-assistant.md`]);
+  assert.deepEqual(vault.processCalls, [`${SYSTEM_PROMPT_FOLDER}/default-assistant.md`]);
 });
 
 test("ensureSystemPromptFiles migrates old hidden prompt content into visible folder", async () => {
@@ -150,12 +150,12 @@ function createMockVault(): {
   folders: Set<string>;
   files: Map<string, string>;
   createFolderCalls: string[];
-  modifyCalls: string[];
+  processCalls: string[];
 } {
   const folders = new Set<string>();
   const files = new Map<string, string>();
   const createFolderCalls: string[] = [];
-  const modifyCalls: string[] = [];
+  const processCalls: string[] = [];
 
   const vault = {
     getFolderByPath(path: string) {
@@ -177,9 +177,11 @@ function createMockVault(): {
       files.set(path, content);
       return { path } as never;
     },
-    async modify(file: { path: string }, content: string) {
+    async process(file: { path: string }, fn: (data: string) => string) {
+      const content = fn(files.get(file.path) ?? "");
       files.set(file.path, content);
-      modifyCalls.push(file.path);
+      processCalls.push(file.path);
+      return content;
     },
     async cachedRead(file: { path: string }) {
       return files.get(file.path) ?? "";
@@ -194,7 +196,7 @@ function createMockVault(): {
     }
   } as Vault;
 
-  return { vault, folders, files, createFolderCalls, modifyCalls };
+  return { vault, folders, files, createFolderCalls, processCalls };
 }
 
 function legacyDefaultAssistantPrompt(): string {

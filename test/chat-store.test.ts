@@ -520,8 +520,10 @@ function createMockVault() {
       files.set(path, data);
       return { path };
     },
-    async modify(file: { path: string }, data: string) {
+    async process(file: { path: string }, fn: (data: string) => string) {
+      const data = fn(files.get(file.path) ?? "");
       files.set(file.path, data);
+      return data;
     },
     async trash(file: { path: string }, system: boolean) {
       trashCalls.push({ path: file.path, system });

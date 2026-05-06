@@ -254,7 +254,7 @@ async function updateLegacyPromptFile(
     return;
   }
 
-  await vault.modify(file, preset.defaultContent);
+  await vault.process(file, () => preset.defaultContent);
 }
 
 async function readLegacyPromptContent(

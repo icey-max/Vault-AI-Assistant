@@ -314,12 +314,13 @@ export class VaultOperationExecutor {
   private async applyCreate(path: string, content: string): Promise<VaultOperationApplyResult> {
     const existingFile: TFile | null = this.vault.getFileByPath(path);
     if (existingFile) {
-      const currentContent = await this.vault.cachedRead(existingFile);
-      if (currentContent.trim().length > 0) {
-        return { ok: false, error: "Note already exists." };
-      }
+      await this.vault.process(existingFile, (currentContent) => {
+        if (currentContent.trim().length > 0) {
+          throw new Error("Note already exists.");
+        }
 
-      await this.vault.modify(existingFile, content);
+        return content;
+      });
       return { ok: true };
     }
 
@@ -344,15 +345,16 @@ export class VaultOperationExecutor {
       return { ok: false, error: "Note was not found." };
     }
 
-    const currentContent = await this.vault.cachedRead(file);
-    if (this.hasStaleBaseline(currentContent, operation)) {
-      return { ok: false, error: CONFLICT_ERROR };
-    }
-    if (!operation.baseContentHash && currentContent !== operation.previousContent) {
-      return { ok: false, error: CONFLICT_ERROR };
-    }
+    await this.vault.process(file, (currentContent) => {
+      if (this.hasStaleBaseline(currentContent, operation)) {
+        throw new Error(CONFLICT_ERROR);
+      }
+      if (!operation.baseContentHash && currentContent !== operation.previousContent) {
+        throw new Error(CONFLICT_ERROR);
+      }
 
-    await this.vault.modify(file, operation.newContent);
+      return operation.newContent;
+    });
     return { ok: true };
   }
 
@@ -362,13 +364,14 @@ export class VaultOperationExecutor {
       return { ok: false, error: "Note was not found." };
     }
 
-    const currentContent = await this.vault.cachedRead(file);
-    if (this.hasStaleBaseline(currentContent, operation)) {
-      return { ok: false, error: CONFLICT_ERROR };
-    }
+    await this.vault.process(file, (currentContent) => {
+      if (this.hasStaleBaseline(currentContent, operation)) {
+        throw new Error(CONFLICT_ERROR);
+      }
 
-    const separator = currentContent.length > 0 && !currentContent.endsWith("\n") ? "\n" : "";
-    await this.vault.modify(file, `${currentContent}${separator}${operation.content}`);
+      const separator = currentContent.length > 0 && !currentContent.endsWith("\n") ? "\n" : "";
+      return `${currentContent}${separator}${operation.content}`;
+    });
     return { ok: true };
   }
 

@@ -359,7 +359,7 @@ export class ChatStore {
         `${DEFAULT_CONVERSATION_FOLDER}/${this.activeConversation.id}.md`;
       const file = this.vault.getFileByPath(filePath);
       if (file) {
-        await this.vault.modify(file, markdown);
+        await this.vault.process(file, () => markdown);
       } else {
         await this.vault.create(filePath, markdown);
       }

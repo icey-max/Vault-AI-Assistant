@@ -230,7 +230,7 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
 
     new Setting(this.containerEl)
       .setName("Assistant view")
-      .setDesc("Choose where the Open Vault AI Assistant command opens the assistant.")
+      .setDesc("Choose where the Open assistant command opens the assistant.")
       .addDropdown((dropdown) => {
         dropdown
           .addOption("sidebar", "Sidebar view")
