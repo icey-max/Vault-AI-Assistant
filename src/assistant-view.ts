@@ -122,20 +122,22 @@ export class VaultAIAssistantView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Vault AI Assistant";
+    return "Vault AI assistant";
   }
 
   getIcon(): string {
     return "message-square";
   }
 
-  async onOpen(): Promise<void> {
+  onOpen(): Promise<void> {
     this.render();
+    return Promise.resolve();
   }
 
-  async onClose(): Promise<void> {
+  onClose(): Promise<void> {
     this.unmountReactRoots();
     this.clearOutsidePointerDisposers();
+    return Promise.resolve();
   }
 
   render(): void {
@@ -191,7 +193,7 @@ export class VaultAIAssistantView extends ItemView {
     const setup = container.createDiv({ cls: "vault-ai-assistant-setup" });
     setup.createEl("h2", { text: "Set up a provider" });
     setup.createEl("p", {
-      text: "Add an OpenAI or Anthropic key in plugin settings to start using the assistant."
+      text: "Add a provider API key in plugin settings to start using the assistant."
     });
 
     const action = setup.createEl("button", {
@@ -258,7 +260,7 @@ export class VaultAIAssistantView extends ItemView {
       empty.createEl("h3", { text: "Start a chat" });
       empty.createEl("p", {
         text:
-          "Ask about attached vault context, then review any proposed markdown changes before they touch your notes."
+          "Ask about attached vault context, then review any proposed Markdown changes before they touch your notes."
       });
 
       if (this.plugin.contextManager.getSummary().fileCount === 0) {
@@ -277,9 +279,7 @@ export class VaultAIAssistantView extends ItemView {
   }
 
   private captureMessageScroll(): MessageScrollSnapshot | null {
-    const list = this.containerEl.querySelector(
-      ".vault-ai-assistant-messages"
-    ) as HTMLElement | null;
+    const list = this.containerEl.querySelector<HTMLElement>(".vault-ai-assistant-messages");
     if (!list) {
       return null;
     }
@@ -297,9 +297,7 @@ export class VaultAIAssistantView extends ItemView {
     }
 
     const restore = () => {
-      const list = this.containerEl.querySelector(
-        ".vault-ai-assistant-messages"
-      ) as HTMLElement | null;
+      const list = this.containerEl.querySelector<HTMLElement>(".vault-ai-assistant-messages");
       if (!list) {
         return;
       }
@@ -1227,15 +1225,15 @@ export class VaultAIAssistantView extends ItemView {
     });
 
     const panel = container.createDiv({ cls: "vault-ai-assistant-chat-settings" });
-    panel.createDiv({ cls: "vault-ai-assistant-chat-settings-title", text: "System Prompt" });
+    panel.createDiv({ cls: "vault-ai-assistant-chat-settings-title", text: "System prompt" });
 
     const row = panel.createDiv({ cls: "vault-ai-assistant-chat-settings-row" });
-    const label = row.createEl("label", { text: "System Prompt" });
+    const label = row.createEl("label", { text: "System prompt" });
     const select = row.createEl("select");
     const currentPresetId = normalizeSystemPromptPresetId(
       this.plugin.settings.systemPromptPresetId
     );
-    select.setAttr("aria-label", "System Prompt");
+    select.setAttr("aria-label", "System prompt");
 
     for (const preset of SYSTEM_PROMPT_PRESETS) {
       const option = select.createEl("option", { text: preset.label });
@@ -1252,7 +1250,7 @@ export class VaultAIAssistantView extends ItemView {
 
   private renderChatHistory(container: HTMLElement): void {
     const panel = container.createDiv({ cls: "vault-ai-assistant-chat-history" });
-    panel.createDiv({ cls: "vault-ai-assistant-chat-history-title", text: "Chat History" });
+    panel.createDiv({ cls: "vault-ai-assistant-chat-history-title", text: "Chat history" });
     const list = panel.createDiv({ cls: "vault-ai-assistant-chat-history-list" });
     list.createDiv({ cls: "vault-ai-assistant-message-meta", text: "Loading saved chats..." });
 
@@ -1327,8 +1325,8 @@ export class VaultAIAssistantView extends ItemView {
   }
 
   private autosizeComposerInput(input: HTMLTextAreaElement): void {
-    input.style.height = "auto";
-    input.style.height = `${Math.min(Math.max(input.scrollHeight, 76), 180)}px`;
+    input.setCssProps({ height: "auto" });
+    input.setCssProps({ height: `${Math.min(Math.max(input.scrollHeight, 76), 180)}px` });
   }
 
   private canSendMessage(value = this.composerValue): boolean {
@@ -1928,7 +1926,7 @@ export class VaultAIAssistantView extends ItemView {
   }
 
   private renderImageAttachmentChips(container: HTMLElement): void {
-    const chips = container.querySelector(".vault-ai-assistant-context-chips") as HTMLElement | null;
+    const chips = container.querySelector<HTMLElement>(".vault-ai-assistant-context-chips");
     if (!chips) {
       return;
     }
@@ -2279,28 +2277,11 @@ export class VaultAIAssistantView extends ItemView {
 }
 
 async function writeTextToClipboard(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
+  if (!navigator.clipboard?.writeText) {
+    throw new Error("Clipboard API is unavailable.");
   }
 
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-
-  try {
-    const copied = document.execCommand("copy");
-    if (!copied) {
-      throw new Error("Clipboard copy failed.");
-    }
-  } finally {
-    textarea.remove();
-  }
+  await navigator.clipboard.writeText(text);
 }
 
 function setIconActionLabel(button: HTMLButtonElement, label: string): void {

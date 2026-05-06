@@ -212,7 +212,7 @@ export class VaultContextManager {
   addCurrentNote(): void {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) {
-      new Notice("No active markdown note to add as context.");
+      new Notice("No active Markdown note to add as context.");
       return;
     }
 
@@ -226,13 +226,13 @@ export class VaultContextManager {
   addFiles(files: TFile[], sourceType: SourceFileType = "note"): void {
     const markdownFiles = files.filter((file) => this.isMarkdownFile(file));
     if (markdownFiles.length === 0) {
-      new Notice("Only markdown notes can be added as context.");
+      new Notice("Only Markdown notes can be added as context.");
       return;
     }
 
     const contextFiles = markdownFiles.filter((file) => !isAssistantOwnedPath(file.path));
     if (contextFiles.length === 0) {
-      new Notice("Vault AI Assistant files cannot be added as context.");
+      new Notice("Assistant files cannot be added as context.");
       return;
     }
 
@@ -246,13 +246,13 @@ export class VaultContextManager {
 
   addFolder(folder: TFolder): void {
     if (isAssistantOwnedPath(folder.path || "/")) {
-      new Notice("Vault AI Assistant folders cannot be added as context.");
+      new Notice("Assistant folders cannot be added as context.");
       return;
     }
 
     const markdownFiles = this.collectMarkdownFiles(folder);
     if (markdownFiles.length === 0) {
-      new Notice("No markdown notes found in that folder.");
+      new Notice("No Markdown notes found in that folder.");
       return;
     }
 
@@ -269,12 +269,12 @@ export class VaultContextManager {
 
   addTargetFile(file: TFile): void {
     if (!this.isMarkdownFile(file)) {
-      new Notice("Only markdown notes can be used as edit targets.");
+      new Notice("Only Markdown notes can be used as edit targets.");
       return;
     }
 
     if (isAssistantOwnedPath(file.path)) {
-      new Notice("Vault AI Assistant files cannot be used as edit targets.");
+      new Notice("Assistant files cannot be used as edit targets.");
       return;
     }
 
@@ -284,7 +284,7 @@ export class VaultContextManager {
 
   addTargetFolder(folder: TFolder): void {
     if (isAssistantOwnedPath(folder.path || "/")) {
-      new Notice("Vault AI Assistant folders cannot be used as edit targets.");
+      new Notice("Assistant folders cannot be used as edit targets.");
       return;
     }
 

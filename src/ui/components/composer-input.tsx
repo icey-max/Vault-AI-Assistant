@@ -101,15 +101,15 @@ export function ComposerInput({
 function autosize(input: HTMLTextAreaElement): void {
   const { minHeight, maxHeight } = getAutosizeBounds(input);
 
-  input.style.height = "auto";
-  input.style.height = `${Math.min(Math.max(input.scrollHeight, minHeight), maxHeight)}px`;
+  input.setCssProps({ height: "auto" });
+  input.setCssProps({ height: `${Math.min(Math.max(input.scrollHeight, minHeight), maxHeight)}px` });
 }
 
 function getAutosizeBounds(input: HTMLTextAreaElement): {
   minHeight: number;
   maxHeight: number;
 } {
-  const view = input.closest(".vault-ai-assistant-view") as HTMLElement | null;
+  const view = input.closest<HTMLElement>(".vault-ai-assistant-view");
   const viewWidth = view?.clientWidth ?? Number.POSITIVE_INFINITY;
   const viewportIsCompact =
     typeof window !== "undefined" && window.matchMedia("(max-width: 420px)").matches;

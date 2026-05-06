@@ -24,7 +24,11 @@ export default class VaultAIAssistantPlugin extends Plugin {
     await this.loadSettings();
     await this.ensureEditableSystemPrompts();
     this.contextManager = new VaultContextManager(this.app, () => this.refreshAssistantViews());
-    this.chatStore = new ChatStore(this.app.vault, () => this.refreshAssistantViews());
+    this.chatStore = new ChatStore(
+      this.app.vault,
+      () => this.refreshAssistantViews(),
+      this.app.fileManager
+    );
     await this.pruneSavedChatHistory();
     this.operationExecutor = new VaultOperationExecutor(this.app.vault, this.app.fileManager);
     this.addSettingTab(new VaultAIAssistantSettingTab(this.app, this));
@@ -39,14 +43,14 @@ export default class VaultAIAssistantPlugin extends Plugin {
         void this.activateView();
       }
     });
-    this.addRibbonIcon("message-square", "Open Vault AI Assistant", () => {
+    this.addRibbonIcon("message-square", "Open assistant", () => {
       void this.activateView();
     });
     this.registerEvent(this.app.workspace.on("file-open", () => this.refreshAssistantViews()));
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = normalizeSettings(Object.assign({}, DEFAULT_SETTINGS, await this.loadData()));
+    this.settings = normalizeSettings({ ...DEFAULT_SETTINGS, ...(await this.loadData()) });
   }
 
   async saveSettings(): Promise<void> {
@@ -81,7 +85,7 @@ export default class VaultAIAssistantPlugin extends Plugin {
     }
 
     if (!leaf) {
-      new Notice("Unable to open Vault AI Assistant view.");
+      new Notice("Unable to open assistant view.");
       return;
     }
 
@@ -89,7 +93,7 @@ export default class VaultAIAssistantPlugin extends Plugin {
       type: VAULT_AI_ASSISTANT_VIEW_TYPE,
       active: true
     });
-    this.app.workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   private getAssistantLeafForLocation(location: AssistantViewLocation): WorkspaceLeaf | null {
@@ -136,16 +140,17 @@ export default class VaultAIAssistantPlugin extends Plugin {
     return false;
   }
 
-  private getWorkspaceItemParent(item: unknown): unknown | null {
+  private getWorkspaceItemParent(item: unknown): object | null {
     if (!item || typeof item !== "object" || !("parent" in item)) {
       return null;
     }
 
-    return (item as { parent?: unknown }).parent ?? null;
+    const parent = (item as { parent?: unknown }).parent;
+    return parent && typeof parent === "object" ? parent : null;
   }
 
   openSettings(): void {
-    new Notice("Open Settings -> Community plugins -> Vault AI Assistant to configure providers.");
+    new Notice("Open plugin settings to configure providers.");
   }
 
   refreshAssistantViews(): void {

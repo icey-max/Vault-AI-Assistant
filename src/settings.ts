@@ -206,8 +206,6 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Vault AI Assistant" });
-
     this.addProviderSection({
       heading: "OpenAI",
       secretField: "openaiSecretName"
@@ -225,12 +223,11 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
   }
 
   private addInterfaceSection(): void {
-    const heading = this.containerEl.createEl("h3", { text: "Interface" });
-    heading.addClass("vault-ai-assistant-settings-heading");
+    new Setting(this.containerEl).setName("Interface").setHeading();
 
     new Setting(this.containerEl)
       .setName("Assistant view")
-      .setDesc("Choose where the Open assistant command opens the assistant.")
+      .setDesc("Choose where the open assistant command opens the assistant.")
       .addDropdown((dropdown) => {
         dropdown
           .addOption("sidebar", "Sidebar view")
@@ -244,13 +241,12 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
   }
 
   private addContextSection(): void {
-    const heading = this.containerEl.createEl("h3", { text: "Context" });
-    heading.addClass("vault-ai-assistant-settings-heading");
+    new Setting(this.containerEl).setName("Context").setHeading();
 
     new Setting(this.containerEl)
       .setName("Auto attach active note")
       .setDesc(
-        "When enabled, each message includes the active markdown note as readable context and uses that note's folder as the default edit target."
+        "When enabled, each message includes the active Markdown note as readable context and uses that note's folder as the default edit target."
       )
       .addToggle((toggle) => {
         toggle
@@ -263,8 +259,7 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
   }
 
   private addResponseSection(): void {
-    const heading = this.containerEl.createEl("h3", { text: "Responses" });
-    heading.addClass("vault-ai-assistant-settings-heading");
+    new Setting(this.containerEl).setName("Responses").setHeading();
 
     const setting = new Setting(this.containerEl)
       .setName("Token limit")
@@ -344,10 +339,9 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
       this.plugin.settings.maxOutputTokens = normalized;
       numberInput.value = String(normalized);
       rangeInput.value = String(normalized);
-      sliderWrap.style.setProperty(
-        "--vault-ai-assistant-token-limit-position",
-        `${percentage}%`
-      );
+      sliderWrap.setCssProps({
+        "--vault-ai-assistant-token-limit-position": `${percentage}%`
+      });
       return normalized;
     };
     const commitValue = async (value: unknown): Promise<void> => {
@@ -419,8 +413,7 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
   }
 
   private addChatHistorySection(): void {
-    const heading = this.containerEl.createEl("h3", { text: "Chat history" });
-    heading.addClass("vault-ai-assistant-settings-heading");
+    new Setting(this.containerEl).setName("Chat history").setHeading();
 
     new Setting(this.containerEl)
       .setName("Delete chat history")
@@ -451,8 +444,7 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
     heading: string;
     secretField: "openaiSecretName" | "anthropicSecretName";
   }): void {
-    const heading = this.containerEl.createEl("h3", { text: options.heading });
-    heading.addClass("vault-ai-assistant-settings-heading");
+    new Setting(this.containerEl).setName(options.heading).setHeading();
 
     new Setting(this.containerEl)
       .setName("API key")

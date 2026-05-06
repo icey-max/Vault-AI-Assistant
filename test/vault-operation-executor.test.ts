@@ -389,9 +389,9 @@ test("VaultOperationExecutor prepareProposalForReview marks deterministic no-op 
   );
 });
 
-test("delete safety: VaultOperationExecutor applies approved delete_note through trash", async () => {
+test("delete safety: VaultOperationExecutor applies approved delete_note through FileManager trash", async () => {
   const vault = createMockVault([["Notes/Delete.md", "delete me"]]);
-  const executor = new VaultOperationExecutor(vault as never);
+  const executor = new VaultOperationExecutor(vault as never, vault.fileManager as never);
 
   const result = await executor.applyOperation({
     id: "operation-1",
@@ -405,7 +405,7 @@ test("delete safety: VaultOperationExecutor applies approved delete_note through
 
   assert.deepEqual(result, { ok: true });
   assert.equal(vault.files.has("Notes/Delete.md"), false);
-  assert.deepEqual(vault.trashCalls, [{ path: "Notes/Delete.md", system: true }]);
+  assert.deepEqual(vault.trashCalls, [{ path: "Notes/Delete.md" }]);
 });
 
 test("VaultOperationExecutor rejects missing and stale delete_note operations", async () => {
@@ -514,7 +514,7 @@ test("VaultOperationExecutor applies move_note, move_folder, copy_note, and dele
   );
   assert.equal(vault.folders.has("Trash"), false);
   assert.equal(vault.files.has("Trash/Child.md"), false);
-  assert.deepEqual(vault.trashCalls.at(-1), { path: "Trash", system: true });
+  assert.deepEqual(vault.trashCalls.at(-1), { path: "Trash" });
   assert.deepEqual(vault.renameFileCalls, [
     { path: "Notes/Alpha.md", newPath: "Notes/Archive/Alpha.md" },
     { path: "Projects/Old", newPath: "Projects/Archive/Old" }
@@ -698,7 +698,7 @@ function createMockVault(initialFiles: Array<[string, string]> = []) {
   const renameFileCalls: Array<{ path: string; newPath: string }> = [];
   let createCalls = 0;
   let processCalls = 0;
-  const trashCalls: Array<{ path: string; system: boolean }> = [];
+  const trashCalls: Array<{ path: string }> = [];
   for (const path of files.keys()) {
     addParentFolders(folders, path);
   }
@@ -737,24 +737,6 @@ function createMockVault(initialFiles: Array<[string, string]> = []) {
       files.set(file.path, data);
       return data;
     },
-    async trash(file: { path: string }, system: boolean) {
-      trashCalls.push({ path: file.path, system });
-      if (files.has(file.path)) {
-        files.delete(file.path);
-        return;
-      }
-      folders.delete(file.path);
-      for (const path of Array.from(files.keys())) {
-        if (path.startsWith(`${file.path}/`)) {
-          files.delete(path);
-        }
-      }
-      for (const path of Array.from(folders)) {
-        if (path.startsWith(`${file.path}/`)) {
-          folders.delete(path);
-        }
-      }
-    },
     async cachedRead(file: { path: string }) {
       return files.get(file.path) ?? "";
     }
@@ -788,6 +770,24 @@ function createMockVault(initialFiles: Array<[string, string]> = []) {
             files.delete(filePath);
             files.set(`${newPath}${filePath.slice(oldPath.length)}`, content);
           }
+        }
+      }
+    },
+    async trashFile(file: { path: string }) {
+      trashCalls.push({ path: file.path });
+      if (files.has(file.path)) {
+        files.delete(file.path);
+        return;
+      }
+      folders.delete(file.path);
+      for (const path of Array.from(files.keys())) {
+        if (path.startsWith(`${file.path}/`)) {
+          files.delete(path);
+        }
+      }
+      for (const path of Array.from(folders)) {
+        if (path.startsWith(`${file.path}/`)) {
+          folders.delete(path);
         }
       }
     }

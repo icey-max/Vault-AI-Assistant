@@ -193,7 +193,7 @@ test("ChatStore autosaves completed and stopped assistant responses", async () =
 
 test("ChatStore updates active conversation title and preserves stale conversations", async () => {
   const vault = createMockVault();
-  const store = new ChatStore(vault as never, () => undefined);
+  const store = new ChatStore(vault as never, () => undefined, vault.fileManager as never);
   const conversationId = store.getState().activeConversation.id;
 
   assert.equal(await store.updateConversationTitle(conversationId, "Alpha Launch Plan"), true);
@@ -384,7 +384,7 @@ test("ChatStore prunes saved conversations older than retention window", async (
   vault.files.set("vault-ai-assistant/conversations/invalid.md", "# Missing metadata");
   vault.files.set("Other/ignored.md", "# Not a chat");
 
-  const store = new ChatStore(vault as never, () => undefined);
+  const store = new ChatStore(vault as never, () => undefined, vault.fileManager as never);
   const deletedCount = await store.pruneSavedConversations(
     7,
     new Date("2026-05-10T00:00:00.000Z")
@@ -396,7 +396,7 @@ test("ChatStore prunes saved conversations older than retention window", async (
   assert.equal(vault.files.has("vault-ai-assistant/conversations/invalid.md"), true);
   assert.equal(vault.files.has("Other/ignored.md"), true);
   assert.deepEqual(vault.trashCalls, [
-    { path: "vault-ai-assistant/conversations/older.md", system: true }
+    { path: "vault-ai-assistant/conversations/older.md" }
   ]);
 });
 
@@ -449,7 +449,7 @@ test("VaultContextManager exposes restore helper contracts", () => {
   assert.match(source, /addTargetFolder/);
   assert.match(source, /addTargetFile/);
   assert.match(source, /isAssistantOwnedPath/);
-  assert.match(source, /Vault AI Assistant files cannot be added as context\./);
+  assert.match(source, /Assistant files cannot be added as context\./);
   assert.match(source, /clearSources/);
 });
 
@@ -492,7 +492,7 @@ function createProposal(): VaultOperationProposal {
 function createMockVault() {
   const files = new Map<string, string>();
   const createdFolders = new Set<string>();
-  const trashCalls: Array<{ path: string; system: boolean }> = [];
+  const trashCalls: Array<{ path: string }> = [];
 
   return {
     files,
@@ -525,9 +525,11 @@ function createMockVault() {
       files.set(file.path, data);
       return data;
     },
-    async trash(file: { path: string }, system: boolean) {
-      trashCalls.push({ path: file.path, system });
-      files.delete(file.path);
+    fileManager: {
+      async trashFile(file: { path: string }) {
+        trashCalls.push({ path: file.path });
+        files.delete(file.path);
+      }
     }
   };
 }

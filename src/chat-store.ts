@@ -1,4 +1,4 @@
-import type { Vault } from "obsidian";
+import type { FileManager, Vault } from "obsidian";
 import type { ChatAttachment, ChatMessage, ChatUsage, ContextSnapshot } from "./chat-types";
 import type { OperationTargetSnapshot } from "./context-utils";
 import type { ProviderId } from "./settings";
@@ -47,11 +47,13 @@ const CONVERSATION_METADATA_END = "<!-- /vault-ai-assistant:conversation -->";
 
 export class ChatStore {
   private vault: Vault;
+  private fileManager?: FileManager;
   private onChange: () => void;
   private activeConversation: ChatConversation;
 
-  constructor(vault: Vault, onChange: () => void) {
+  constructor(vault: Vault, onChange: () => void, fileManager?: FileManager) {
     this.vault = vault;
+    this.fileManager = fileManager;
     this.onChange = onChange;
     this.activeConversation = createConversation();
   }
@@ -239,6 +241,7 @@ export class ChatStore {
       status: "error",
       error
     }));
+    await this.autosave();
   }
 
   async updateConversationTitle(conversationId: string, title: string): Promise<boolean> {
@@ -321,7 +324,11 @@ export class ChatStore {
         continue;
       }
 
-      await this.vault.trash(file, true);
+      if (!this.fileManager) {
+        throw new Error("FileManager is required to prune saved conversations.");
+      }
+
+      await this.fileManager.trashFile(file);
       deletedCount += 1;
     }
 

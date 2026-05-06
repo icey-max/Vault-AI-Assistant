@@ -133,7 +133,7 @@ async function readProviderErrorDetail(response: Response): Promise<ProviderErro
   }
 }
 
-function parseJson(raw: string): unknown | null {
+function parseJson(raw: string): unknown {
   try {
     return JSON.parse(raw) as unknown;
   } catch {

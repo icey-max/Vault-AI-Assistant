@@ -386,7 +386,11 @@ export class VaultOperationExecutor {
       return { ok: false, error: CONFLICT_ERROR };
     }
 
-    await this.vault.trash(file, true);
+    if (!this.fileManager) {
+      return { ok: false, error: "FileManager is required for delete operations." };
+    }
+
+    await this.fileManager.trashFile(file);
     return { ok: true };
   }
 
@@ -462,7 +466,11 @@ export class VaultOperationExecutor {
       return { ok: false, error: "Folder was not found." };
     }
 
-    await this.vault.trash(folder, true);
+    if (!this.fileManager) {
+      return { ok: false, error: "FileManager is required for delete operations." };
+    }
+
+    await this.fileManager.trashFile(folder);
     return { ok: true };
   }
 
