@@ -463,6 +463,10 @@ test("assistant chat view keeps required Phase 6 prompt settings contract", () =
 
   for (const text of [
     "systemPromptPresetId",
+    "assistantViewLocation",
+    "Assistant view",
+    "Sidebar view",
+    "Editor",
     "autoAttachActiveFileContext",
     "Auto attach active note",
     "DEFAULT_SYSTEM_PROMPT_PRESET_ID",
@@ -520,6 +524,17 @@ test("assistant chat view keeps required Phase 6 prompt settings contract", () =
     "pruneSavedChatHistory",
     "chatHistoryRetentionDays === null",
     "this.chatStore.pruneSavedConversations"
+  ]) {
+    assert.match(mainSource, new RegExp(escapeRegExp(text)));
+  }
+
+  for (const text of [
+    "getAssistantLeafForLocation",
+    "createAssistantLeafForLocation",
+    "getLeaf(\"tab\")",
+    "getRightLeaf(false)",
+    "isLeafInSidebar",
+    "isLeafInEditor"
   ]) {
     assert.match(mainSource, new RegExp(escapeRegExp(text)));
   }

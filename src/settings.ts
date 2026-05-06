@@ -21,11 +21,13 @@ export interface VaultAIAssistantSettings {
   anthropicSecretName: string;
   anthropicModel: string;
   systemPromptPresetId: SystemPromptPresetId;
+  assistantViewLocation: AssistantViewLocation;
   autoAttachActiveFileContext: boolean;
   chatHistoryRetentionDays: ChatHistoryRetentionDays;
   maxOutputTokens: number;
 }
 
+export type AssistantViewLocation = "sidebar" | "editor";
 export type ChatHistoryRetentionDays = null | 1 | 3 | 7 | 30 | 60 | 90;
 export const DEFAULT_MAX_OUTPUT_TOKENS = 6000;
 export const OUTPUT_TOKEN_LIMIT_MIN = 256;
@@ -47,6 +49,7 @@ export const DEFAULT_SETTINGS: VaultAIAssistantSettings = {
   anthropicSecretName: "",
   anthropicModel: "claude-sonnet-4-6",
   systemPromptPresetId: DEFAULT_SYSTEM_PROMPT_PRESET_ID,
+  assistantViewLocation: "sidebar",
   autoAttachActiveFileContext: false,
   chatHistoryRetentionDays: null,
   maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS
@@ -139,6 +142,9 @@ export function normalizeSettings(settings: VaultAIAssistantSettings): VaultAIAs
   normalized.systemPromptPresetId = normalizeSystemPromptPresetId(
     normalized.systemPromptPresetId
   );
+  normalized.assistantViewLocation = normalizeAssistantViewLocation(
+    normalized.assistantViewLocation
+  );
   normalized.autoAttachActiveFileContext = normalized.autoAttachActiveFileContext === true;
   normalized.chatHistoryRetentionDays = normalizeChatHistoryRetentionDays(
     normalized.chatHistoryRetentionDays
@@ -176,6 +182,10 @@ export function normalizeChatHistoryRetentionDays(value: unknown): ChatHistoryRe
     : null;
 }
 
+export function normalizeAssistantViewLocation(value: unknown): AssistantViewLocation {
+  return value === "editor" ? "editor" : "sidebar";
+}
+
 function isModelOption(provider: ProviderId, model: string): boolean {
   return MODEL_OPTIONS[provider].some((option) => option.value === model);
 }
@@ -209,8 +219,28 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
     });
 
     this.addResponseSection();
+    this.addInterfaceSection();
     this.addContextSection();
     this.addChatHistorySection();
+  }
+
+  private addInterfaceSection(): void {
+    const heading = this.containerEl.createEl("h3", { text: "Interface" });
+    heading.addClass("vault-ai-assistant-settings-heading");
+
+    new Setting(this.containerEl)
+      .setName("Assistant view")
+      .setDesc("Choose where the Open Vault AI Assistant command opens the assistant.")
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("sidebar", "Sidebar view")
+          .addOption("editor", "Editor")
+          .setValue(this.plugin.settings.assistantViewLocation)
+          .onChange(async (value) => {
+            this.plugin.settings.assistantViewLocation = normalizeAssistantViewLocation(value);
+            await this.plugin.saveSettings();
+          });
+      });
   }
 
   private addContextSection(): void {

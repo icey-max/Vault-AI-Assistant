@@ -8,9 +8,9 @@ import { VaultContextManager } from "./context";
 import {
   DEFAULT_SETTINGS,
   normalizeSettings,
-  VaultAIAssistantSettings,
   VaultAIAssistantSettingTab
 } from "./settings";
+import type { AssistantViewLocation, VaultAIAssistantSettings } from "./settings";
 import { ensureSystemPromptFiles } from "./system-prompts";
 import { VaultOperationExecutor } from "./vault-operation-executor";
 
@@ -79,12 +79,10 @@ export default class VaultAIAssistantPlugin extends Plugin {
   }
 
   async activateView(): Promise<void> {
-    let leaf: WorkspaceLeaf | null = this.app.workspace.getLeavesOfType(
-      VAULT_AI_ASSISTANT_VIEW_TYPE
-    )[0] ?? null;
+    let leaf = this.getAssistantLeafForLocation(this.settings.assistantViewLocation);
 
     if (!leaf) {
-      leaf = this.app.workspace.getRightLeaf(false);
+      leaf = this.createAssistantLeafForLocation(this.settings.assistantViewLocation);
     }
 
     if (!leaf) {
@@ -97,6 +95,58 @@ export default class VaultAIAssistantPlugin extends Plugin {
       active: true
     });
     this.app.workspace.revealLeaf(leaf);
+  }
+
+  private getAssistantLeafForLocation(location: AssistantViewLocation): WorkspaceLeaf | null {
+    const leaves = this.app.workspace.getLeavesOfType(VAULT_AI_ASSISTANT_VIEW_TYPE);
+
+    return (
+      leaves.find((leaf) =>
+        location === "sidebar" ? this.isLeafInSidebar(leaf) : this.isLeafInEditor(leaf)
+      ) ?? null
+    );
+  }
+
+  private createAssistantLeafForLocation(
+    location: AssistantViewLocation
+  ): WorkspaceLeaf | null {
+    if (location === "editor") {
+      return this.app.workspace.getLeaf("tab");
+    }
+
+    return this.app.workspace.getRightLeaf(false);
+  }
+
+  private isLeafInSidebar(leaf: WorkspaceLeaf): boolean {
+    return (
+      this.isWorkspaceItemWithin(leaf, this.app.workspace.leftSplit) ||
+      this.isWorkspaceItemWithin(leaf, this.app.workspace.rightSplit)
+    );
+  }
+
+  private isLeafInEditor(leaf: WorkspaceLeaf): boolean {
+    return this.isWorkspaceItemWithin(leaf, this.app.workspace.rootSplit);
+  }
+
+  private isWorkspaceItemWithin(item: unknown, container: unknown): boolean {
+    let parent = this.getWorkspaceItemParent(item);
+    while (parent) {
+      if (parent === container) {
+        return true;
+      }
+
+      parent = this.getWorkspaceItemParent(parent);
+    }
+
+    return false;
+  }
+
+  private getWorkspaceItemParent(item: unknown): unknown | null {
+    if (!item || typeof item !== "object" || !("parent" in item)) {
+      return null;
+    }
+
+    return (item as { parent?: unknown }).parent ?? null;
   }
 
   openSettings(): void {

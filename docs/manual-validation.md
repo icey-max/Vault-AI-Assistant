@@ -29,6 +29,7 @@ Open the test vault in Obsidian, enable community plugins, and enable Vault AI A
 ## Core Chat Flow
 
 - [ ] Configure an OpenAI or Anthropic API key through plugin settings.
+- [ ] Set `Assistant view` to `Sidebar view`, open the assistant, then set it to `Editor` and confirm the command opens an editor tab.
 - [ ] Select a model in the chat composer.
 - [ ] Attach a markdown note as readable context.
 - [ ] Ask a question about that note and verify the answer uses only attached context for vault-specific claims.

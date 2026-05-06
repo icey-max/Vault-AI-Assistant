@@ -4,9 +4,14 @@ Vault AI Assistant is an Obsidian plugin that adds an AI chat assistant for work
 
 This is an alpha release. Use it on a test vault first and review proposed file changes carefully.
 
+## Preview
+
+![Vault AI Assistant chat view in Obsidian](docs/assets/view.png)
+
 ## Features
 
 - Chat with OpenAI or Anthropic models from inside Obsidian.
+- Open the assistant in the sidebar or in an editor tab.
 - Attach notes, folders, the active note, and images as explicit request context.
 - Optionally auto-attach the active note and use its folder as the default edit target.
 - Add edit target hints so the assistant knows where you intend vault changes to go without sending hidden folder contents as readable context.
@@ -15,6 +20,16 @@ This is an alpha release. Use it on a test vault first and review proposed file 
 - Built-in system prompts can be edited from markdown files under `vault-ai-assistant/system-prompts`.
 - Custom markdown files added under `vault-ai-assistant/system-prompts` appear as selectable system prompts in chat settings.
 - Saved chat history is stored locally in the vault under `vault-ai-assistant/conversations`.
+
+## Context and Edit Targets
+
+Vault AI Assistant separates readable context from edit targets.
+
+Context is the material the model can read. When you attach notes, folders, the active note, or images as context, their contents are included in the provider request so the assistant can answer from them or use them while drafting a proposal.
+
+Edit targets are path hints for where requested vault changes should happen. A target can be a note, a folder, or the default vault root target shown as `Target /`. Target-only folders and notes do not send hidden file contents to the model unless you also attach them as readable context.
+
+A folder can be used in both ways: attach it as context when the assistant needs to read the files inside it, or set it as an edit target when you only want to indicate where new or changed files should go. Edit targets are not direct write permission; every vault operation still appears as an approval card and nothing is written until you approve it.
 
 ## Safety Model
 
@@ -51,7 +66,7 @@ The plugin does not run its own backend service and does not intentionally colle
 2. Open Obsidian settings and go to Vault AI Assistant.
 3. Add or select an OpenAI or Anthropic API key in Obsidian SecretStorage.
 4. Choose a model from the chat composer.
-5. Attach context from the composer and send a message.
+5. Attach readable context, set an edit target if you want the assistant to propose vault changes, and send a message.
 
 For first use, test in a non-critical vault so you can validate the approval flow safely.
 
