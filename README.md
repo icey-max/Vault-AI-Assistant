@@ -115,11 +115,3 @@ npm run copy:plugin
 Then open Obsidian, enable community plugins, and enable Vault AI Assistant in the test vault.
 
 Before controlled alpha or beta testing, run the checklist in `docs/manual-validation.md`.
-
-## Release Assets
-
-For an Obsidian release, upload these files to a GitHub release whose tag exactly matches `manifest.json` version:
-
-- `main.js`
-- `manifest.json`
-- `styles.css`
