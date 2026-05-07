@@ -707,6 +707,62 @@ test("repair behavior: OpenAIChatAdapter repairs one invalid Orchestrator Operat
   assert.doesNotMatch(bodies[1], /test-api-key/);
 });
 
+test("AnthropicChatAdapter hydrates context-backed modify content without repair", async () => {
+  let requestCount = 0;
+  const adapter = new AnthropicChatAdapter(async () => {
+    requestCount += 1;
+    return new Response(
+      streamText([
+        sse({ type: "message_start", message: { id: "msg_1" } }),
+        sse({
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "propose_vault_operations",
+            input: {
+              summary: "Restructure note",
+              operations: [
+                {
+                  type: "modify",
+                  path: "Notes/Alpha.md",
+                  description: "Replace the note with a tiered structure",
+                  content: "# Alpha\n\n## Top 10\n- Revolver"
+                }
+              ]
+            }
+          }
+        }),
+        sse({ type: "content_block_stop", index: 0 }),
+        sse({ type: "message_stop" })
+      ]),
+      { status: 200 }
+    );
+  });
+
+  const events = await collectEvents(
+    adapter.stream(
+      { ...createVaultOperationRequest(), provider: "anthropic", model: "claude-sonnet-4-6" },
+      new AbortController().signal
+    )
+  );
+  const proposal = events.find((event): event is Extract<ChatEvent, { type: "proposal" }> => event.type === "proposal");
+
+  assert.ok(proposal);
+  assert.equal(requestCount, 1);
+  assert.deepEqual(
+    events.map((event) => event.type),
+    ["start", "proposal", "done"]
+  );
+  const operation = proposal.proposal.operations[0];
+  assert.equal(operation.type, "modify_note");
+  if (operation.type === "modify_note") {
+    assert.equal(operation.previousContent, "Alpha context");
+    assert.equal(operation.newContent, "# Alpha\n\n## Top 10\n- Revolver");
+  }
+});
+
 test("OpenAIChatAdapter allows out-of-context modify targets for approval review", async () => {
   const adapter = new OpenAIChatAdapter(async (_input, init) => {
     const body = String(init.body);
@@ -1118,28 +1174,14 @@ test("provider model options use current predefined defaults", () => {
   }
 });
 
-test("OpenAIChatAdapter default fetch preserves the global fetch receiver", async () => {
-  const originalFetch = globalThis.fetch;
-  try {
-    globalThis.fetch = async function boundFetch(this: typeof globalThis) {
-      assert.equal(this, globalThis);
-      return new Response(
-        streamText([
-          'data: {"type":"response.created","response":{"id":"resp_1"}}\n\n',
-          'data: {"type":"response.completed","response":{"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}\n\n'
-        ]),
-        { status: 200 }
-      );
-    } as typeof fetch;
+test("provider adapters require an explicit Obsidian-safe transport", () => {
+  const openAISource = readFileSync("src/providers/openai-adapter.ts", "utf8");
+  const anthropicSource = readFileSync("src/providers/anthropic-adapter.ts", "utf8");
 
-    const events = await collectEvents(new OpenAIChatAdapter().stream(createRequest(), new AbortController().signal));
-    assert.deepEqual(
-      events.map((event) => event.type),
-      ["start", "done"]
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assert.match(openAISource, /constructor\(fetchImpl: ChatFetch\)/);
+  assert.match(anthropicSource, /constructor\(fetchImpl: ChatFetch\)/);
+  assert.doesNotMatch(openAISource, /globalThis\.fetch|window\.fetch|\bfetch\s*\(/);
+  assert.doesNotMatch(anthropicSource, /globalThis\.fetch|window\.fetch|\bfetch\s*\(/);
 });
 
 test("OpenAIChatAdapter surfaces sanitized provider HTTP errors", async () => {

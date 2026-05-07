@@ -1,13 +1,15 @@
 {
   "name": "vault-ai-assistant",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AI assistant for explicitly attached vault context with approval-gated vault actions.",
   "main": "main.js",
   "type": "module",
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "build": "npm run compliance && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "lint": "eslint .",
+    "compliance": "node scripts/check-obsidian-guidelines.mjs",
+    "check": "npm run lint && npm test && npm run build",
     "test:context": "node scripts/run-context-tests.mjs",
     "test:chat": "node scripts/run-chat-tests.mjs",
     "test": "npm run test:context && npm run test:chat",
@@ -29,6 +31,7 @@
     "eslint-plugin-obsidianmd": "0.1.9",
     "globals": "14.0.0",
     "jiti": "2.6.1",
+    "obsidian": "1.12.3",
     "tailwindcss": "^4.2.4",
     "tslib": "2.4.0",
     "typescript": "^5.8.3",
@@ -41,7 +44,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.14.0",
-    "obsidian": "latest",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "tailwind-merge": "^3.5.0"

@@ -7,7 +7,7 @@ import {
   type VaultOperationToolSchema
 } from "../orchestrator-operations";
 import { formatProviderHttpError } from "../provider-errors";
-import { defaultChatFetch, type ChatFetch } from "./openai-adapter";
+import type { ChatFetch } from "./openai-adapter";
 import { serializeAssistantMessageForProviderHistory } from "./message-history";
 import { buildProviderSystemPrompt } from "./runtime-prompt";
 
@@ -68,7 +68,7 @@ const INCOMPLETE_ANTHROPIC_OPERATION_MESSAGE =
 export class AnthropicChatAdapter implements ChatAdapter {
   private fetchImpl: ChatFetch;
 
-  constructor(fetchImpl: ChatFetch = defaultChatFetch) {
+  constructor(fetchImpl: ChatFetch) {
     this.fetchImpl = fetchImpl;
   }
 

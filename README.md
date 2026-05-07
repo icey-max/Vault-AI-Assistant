@@ -89,10 +89,13 @@ npm install
 Run checks:
 
 ```bash
+npm run compliance
 npm test
 npm run build
 npm run lint
 ```
+
+`npm run check` runs lint, tests, and the production build. Obsidian release and planning guardrails are documented in `docs/obsidian-plugin-guardrails.md`; compliance runs automatically before `npm run build`.
 
 Run a development watcher:
 

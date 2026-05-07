@@ -543,6 +543,56 @@ test("handleOrchestratorOperationPayload rejects malformed payloads without raw 
   assert.doesNotMatch(result.message, /<function_calls>|<atml:invoke/);
 });
 
+test("handleOrchestratorOperationPayload hydrates context-backed modify content", () => {
+  const result = handleOrchestratorOperationPayload(
+    {
+      summary: "Organize notes by tier",
+      operations: [
+        {
+          type: "modify",
+          path: "Notes/Watched Items.md",
+          description: "Restructure watched items into rating tiers",
+          content: [
+            "# Watched Items",
+            "",
+            "## Top 10",
+            "- **Example A** — Strong concept and execution.",
+            "",
+            "## Liked",
+            "",
+            "## Didn't Impress",
+            "- **Example B** — Interesting premise, but it did not land."
+          ].join("\n")
+        }
+      ]
+    },
+    {
+      contextFiles: [
+        {
+          path: "Notes/Watched Items.md",
+          content: "# Watched Items\n\n- **Example A**\n- **Example B**",
+          charCount: 47,
+          estimatedTokens: 12,
+          sourceIds: ["note:Notes/Watched Items.md"]
+        }
+      ]
+    }
+  );
+
+  assert.equal(result.ok, true);
+  if (!result.ok) {
+    return;
+  }
+
+  const operation = result.proposal.operations[0];
+  assert.equal(operation.type, "modify_note");
+  if (operation.type === "modify_note") {
+    assert.equal(operation.previousContent, "# Watched Items\n\n- **Example A**\n- **Example B**");
+    assert.match(operation.newContent, /## Top 10/);
+    assert.match(operation.preview ?? "", /-# Watched Items|--- Notes\/Watched Items\.md/);
+  }
+});
+
 test("raw tool fallback extracts visible function-call text into context-scoped operations", () => {
   const rawTexts = [
     `I'll correct the file.

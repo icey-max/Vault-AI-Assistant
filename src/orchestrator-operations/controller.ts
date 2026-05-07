@@ -23,7 +23,14 @@ export function handleOrchestratorOperationPayload(
   options: OrchestratorOperationValidationOptions = {}
 ): OrchestratorOperationControllerResult {
   const normalized = normalizeOrchestratorOperationProposal(input);
-  const hydrated = hydrateTemplateBackedCreateOperations(normalized, options.contextFiles ?? []);
+  const hydratedCreates = hydrateTemplateBackedCreateOperations(
+    normalized,
+    options.contextFiles ?? []
+  );
+  const hydrated = hydrateContextBackedModifyOperations(
+    hydratedCreates,
+    options.contextFiles ?? []
+  );
   const result = validateOrchestratorOperationProposal(hydrated, options);
   if (result.ok) {
     return { ok: true, proposal: result.proposal };
@@ -34,6 +41,58 @@ export function handleOrchestratorOperationPayload(
     message: INVALID_ORCHESTRATOR_OPERATION_MESSAGE,
     errors: result.errors,
     repairPrompt: createRepairPrompt(normalized, result.errors)
+  };
+}
+
+function hydrateContextBackedModifyOperations(
+  input: unknown,
+  contextFiles: ContextPackageFile[]
+): unknown {
+  if (contextFiles.length === 0 || !isRecord(input) || !Array.isArray(input.operations)) {
+    return input;
+  }
+
+  return {
+    ...input,
+    operations: input.operations.map((operation) =>
+      hydrateContextBackedModifyOperation(operation, contextFiles)
+    )
+  };
+}
+
+function hydrateContextBackedModifyOperation(
+  operation: unknown,
+  contextFiles: ContextPackageFile[]
+): unknown {
+  if (!isRecord(operation) || operation.type !== "modify_note") {
+    return operation;
+  }
+
+  const replacementContent =
+    typeof operation.newContent === "string"
+      ? operation.newContent
+      : typeof operation.content === "string"
+        ? operation.content
+        : undefined;
+  if (replacementContent === undefined) {
+    return operation;
+  }
+
+  const hasPreviousContent = typeof operation.previousContent === "string";
+  if (hasPreviousContent && typeof operation.newContent === "string") {
+    return operation;
+  }
+
+  const path = firstString(operation.path);
+  const contextFile = path ? contextFiles.find((file) => file.path === path) : undefined;
+  if (!hasPreviousContent && !contextFile) {
+    return operation;
+  }
+
+  return {
+    ...operation,
+    previousContent: hasPreviousContent ? operation.previousContent : contextFile?.content,
+    newContent: replacementContent
   };
 }
 

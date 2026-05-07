@@ -12,10 +12,6 @@ import { serializeAssistantMessageForProviderHistory } from "./message-history";
 
 export type ChatFetch = (input: string, init: RequestInit) => Promise<Response>;
 
-export function defaultChatFetch(input: string, init: RequestInit): Promise<Response> {
-  return globalThis.fetch(input, init);
-}
-
 interface OpenAIStreamEvent {
   type?: string;
   response?: {
@@ -53,7 +49,7 @@ type OpenAIContentPart =
 export class OpenAIChatAdapter implements ChatAdapter {
   private fetchImpl: ChatFetch;
 
-  constructor(fetchImpl: ChatFetch = defaultChatFetch) {
+  constructor(fetchImpl: ChatFetch) {
     this.fetchImpl = fetchImpl;
   }
 
