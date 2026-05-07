@@ -451,6 +451,7 @@ test("VaultContextManager exposes restore helper contracts", () => {
   assert.match(source, /isAssistantOwnedPath/);
   assert.match(source, /Assistant files cannot be added as context\./);
   assert.match(source, /clearSources/);
+  assert.match(source, /clearSourcesAndTargets/);
 });
 
 function createProposal(): VaultOperationProposal {

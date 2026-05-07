@@ -310,6 +310,16 @@ export class VaultContextManager {
     this.emitChange();
   }
 
+  clearSourcesAndTargets(): void {
+    if (this.sources.length === 0 && this.targetSources.length === 0) {
+      return;
+    }
+
+    this.sources = [];
+    this.targetSources = [];
+    this.emitChange();
+  }
+
   removeTargetSource(sourceId: string): void {
     const originalLength = this.targetSources.length;
     this.targetSources = this.targetSources.filter((source) => source.id !== sourceId);

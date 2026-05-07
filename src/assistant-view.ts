@@ -220,8 +220,26 @@ export class VaultAIAssistantView extends ItemView {
     setIcon(action, "message-square-plus");
     setIconActionLabel(action, "New chat");
     action.addEventListener("click", () => {
-      void this.plugin.chatStore.newChat();
+      void this.startNewChat();
     });
+  }
+
+  private async startNewChat(): Promise<void> {
+    await this.plugin.chatStore.newChat();
+    this.clearConversationDraftState();
+    this.render();
+  }
+
+  private clearConversationDraftState(): void {
+    this.composerValue = "";
+    this.composerHelperMessage = "";
+    this.composerHelperIsError = false;
+    this.imageAttachments = [];
+    this.composerScopeMode = "context";
+    this.modelPickerOpen = false;
+    this.chatHistoryOpen = false;
+    this.chatSettingsOpen = false;
+    this.plugin.contextManager.clearSourcesAndTargets();
   }
 
   private renderChat(container: HTMLElement): void {
@@ -953,10 +971,7 @@ export class VaultAIAssistantView extends ItemView {
           void this.selectComposerModel(provider, model);
         },
         onNewChat: () => {
-          this.chatHistoryOpen = false;
-          this.chatSettingsOpen = false;
-          this.modelPickerOpen = false;
-          void this.plugin.chatStore.newChat();
+          void this.startNewChat();
         },
         onToggleChatHistory: () => this.toggleChatHistory(),
         onToggleSettings: () => this.toggleChatSettings(),
@@ -1293,26 +1308,9 @@ export class VaultAIAssistantView extends ItemView {
       return;
     }
 
-    const lastUserMessage = [...conversation.messages].reverse().find((message) => message.role === "user");
-    const attachments = lastUserMessage?.attachments ?? [];
-    this.plugin.contextManager.restoreSources(
-      attachments.filter((attachment) => attachment.kind === "markdown")
-    );
-    this.imageAttachments = attachments
-      .filter((attachment): attachment is ChatImageAttachment => attachment.kind === "image")
-      .map((attachment) => this.restoreImageAttachmentStatus(attachment));
+    this.clearConversationDraftState();
     this.chatHistoryOpen = false;
     this.render();
-  }
-
-  private restoreImageAttachmentStatus(attachment: ChatImageAttachment): ChatImageAttachment {
-    if (!attachment.persistedPath) {
-      return { ...attachment, status: "missing" };
-    }
-
-    return this.app.vault.getFileByPath(attachment.persistedPath)
-      ? { ...attachment, status: "persisted" }
-      : { ...attachment, status: "missing" };
   }
 
   private formatHistoryDate(value: string): string {

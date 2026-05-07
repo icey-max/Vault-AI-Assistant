@@ -367,7 +367,9 @@ test("assistant chat view keeps Phase 10 visual-only IDE panel contract", () => 
     "buildContextPackage",
     "getOperationTargetScope",
     "operationExecutor.applyOperation",
-    "void this.plugin.chatStore.newChat()",
+    "void this.startNewChat()",
+    "clearConversationDraftState",
+    "clearSourcesAndTargets",
     "attachExternalImageFiles",
     "createDraftImageAttachment",
     "persistImageAttachment"
@@ -721,11 +723,14 @@ test("assistant chat view keeps required Phase 04.1 composer contract", () => {
     "ResizeObserver",
     "listSavedConversations",
     "openConversation",
-    "restoreSources",
+    "clearConversationDraftState",
+    "clearSourcesAndTargets",
     "isSupportedImagePath"
   ]) {
     assert.match(source, new RegExp(escapeRegExp(text)));
   }
+
+  assert.doesNotMatch(source, /restoreSources\(/);
 
   for (const text of [
     ".vault-ai-assistant-composer-settings",
