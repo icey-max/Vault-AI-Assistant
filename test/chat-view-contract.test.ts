@@ -184,7 +184,7 @@ test("assistant chat view keeps required Phase 3.5 chat action contract", () => 
 
   assert.doesNotMatch(source, /pendingNewChatConfirmation/);
   assert.doesNotMatch(source, /Start new chat/);
-  assert.doesNotMatch(source, /Cancel/);
+  assert.doesNotMatch(source, /\bCancel\b/);
   assert.doesNotMatch(source, /renderChatSettings\(composer\)/);
   assert.doesNotMatch(source, /renderChatHistory\(composer\)/);
   assert.doesNotMatch(source, /renderNewChatAction\(header\)/);
@@ -632,6 +632,15 @@ test("assistant chat view keeps Phase 13 voice mode contract", () => {
     "startVoiceRecording",
     "transcribeVoiceRecording",
     "navigator.mediaDevices.getUserMedia",
+    "VOICE_RECORDER_AUDIO_CONSTRAINTS",
+    "echoCancellation",
+    "noiseSuppression",
+    "autoGainControl",
+    "getVoiceRecorderOptions",
+    "MediaRecorder.isTypeSupported",
+    "VOICE_RECORDER_TIMESLICE_MS",
+    "requestData()",
+    "getVoiceAudioFileName",
     "modelSupportsVoice",
     "Selected model does not support voice input",
     "providerConfig.label",

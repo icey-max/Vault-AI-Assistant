@@ -7,6 +7,7 @@ import {
   OPENAI_TRANSCRIPTION_MODEL,
   VoiceModeError,
   createOpenAISpeechAudioWithRequestUrl,
+  getVoiceAudioFileName,
   mergeVoiceTranscriptDraft,
   transcribeEnglishAudioWithRequestUrl
 } from "../src/voice-mode";
@@ -17,7 +18,7 @@ test("voice transcription request sends only English audio fields", async () => 
     {
       apiKey: "test-openai-secret",
       audioData: new TextEncoder().encode("audio bytes").buffer,
-      mediaType: "audio/webm",
+      mediaType: "audio/webm;codecs=opus",
       fileName: "voice-input.webm"
     },
     async (request) => {
@@ -37,10 +38,19 @@ test("voice transcription request sends only English audio fields", async () => 
   assert.match(body, /name="language"[\s\S]*en/);
   assert.match(body, /name="response_format"[\s\S]*json/);
   assert.match(body, /name="file"; filename="voice-input\.webm"/);
+  assert.match(body, /Content-Type: audio\/webm/);
   assert.doesNotMatch(body, /Alpha context/);
   assert.doesNotMatch(body, /Available edit target hints/);
   assert.doesNotMatch(body, /proposal/);
   assert.doesNotMatch(body, /data:image/);
+});
+
+test("voice transcription upload names files from the recorded media type", () => {
+  assert.equal(getVoiceAudioFileName("audio/webm;codecs=opus"), "voice-input.webm");
+  assert.equal(getVoiceAudioFileName("audio/mp4;codecs=mp4a.40.2"), "voice-input.m4a");
+  assert.equal(getVoiceAudioFileName("video/mp4"), "voice-input.mp4");
+  assert.equal(getVoiceAudioFileName("audio/wav"), "voice-input.wav");
+  assert.equal(getVoiceAudioFileName(""), "voice-input.webm");
 });
 
 test("voice transcription maps provider failures to sanitized errors", async () => {

@@ -84,6 +84,7 @@ import type {
 } from "./ui/components/composer-toolbar";
 import {
   createOpenAISpeechAudio,
+  getVoiceAudioFileName,
   isVoiceModeError,
   mergeVoiceTranscriptDraft,
   transcribeEnglishAudio
@@ -92,6 +93,20 @@ import {
 export const VAULT_AI_ASSISTANT_VIEW_TYPE = "vault-ai-assistant-view";
 const INCOMPLETE_ORCHESTRATOR_OPERATION_RECOVERY_MESSAGE =
   "The provider returned an incomplete Orchestrator Operation proposal. No vault files were changed. Retry the request or ask for fewer file changes.";
+const VOICE_RECORDER_MIME_TYPES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4;codecs=mp4a.40.2",
+  "audio/mp4",
+  "audio/ogg;codecs=opus",
+  "audio/ogg"
+] as const;
+const VOICE_RECORDER_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true
+};
+const VOICE_RECORDER_TIMESLICE_MS = 1000;
 
 interface MessageScrollSnapshot {
   top: number;
@@ -1548,6 +1563,37 @@ export class VaultAIAssistantView extends ItemView {
     await this.startVoiceRecording();
   }
 
+  private async getVoiceMediaStream(): Promise<MediaStream> {
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: VOICE_RECORDER_AUDIO_CONSTRAINTS
+      });
+    } catch (error) {
+      if (!this.isMicrophoneConstraintError(error)) {
+        throw error;
+      }
+
+      return navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+  }
+
+  private getVoiceRecorderOptions(): MediaRecorderOptions | undefined {
+    if (
+      typeof MediaRecorder === "undefined" ||
+      typeof MediaRecorder.isTypeSupported !== "function"
+    ) {
+      return undefined;
+    }
+
+    for (const mimeType of VOICE_RECORDER_MIME_TYPES) {
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        return { mimeType };
+      }
+    }
+
+    return undefined;
+  }
+
   private async startVoiceRecording(): Promise<void> {
     if (this.activeAbortController || this.voiceIsTranscribing) {
       return;
@@ -1562,10 +1608,11 @@ export class VaultAIAssistantView extends ItemView {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      this.voiceRecorder = recorder;
+      const stream = await this.getVoiceMediaStream();
       this.voiceRecordingStream = stream;
+      const recorderOptions = this.getVoiceRecorderOptions();
+      const recorder = new MediaRecorder(stream, recorderOptions);
+      this.voiceRecorder = recorder;
       this.voiceChunks = [];
       this.voiceShouldTranscribeOnStop = true;
       recorder.addEventListener("dataavailable", (event: BlobEvent) => {
@@ -1575,7 +1622,8 @@ export class VaultAIAssistantView extends ItemView {
       });
       recorder.addEventListener("stop", () => {
         const chunks = this.voiceChunks;
-        const mediaType = recorder.mimeType || chunks[0]?.type || "audio/webm";
+        const mediaType =
+          chunks[0]?.type || recorder.mimeType || recorderOptions?.mimeType || "audio/webm";
         const audioBlob = new Blob(chunks, { type: mediaType });
         const shouldTranscribe = this.voiceShouldTranscribeOnStop;
         this.voiceRecorder = null;
@@ -1587,7 +1635,7 @@ export class VaultAIAssistantView extends ItemView {
           void this.transcribeVoiceRecording(audioBlob);
         }
       });
-      recorder.start();
+      recorder.start(VOICE_RECORDER_TIMESLICE_MS);
       this.voiceIsRecording = true;
       this.composerHelperMessage = "Recording voice...";
       this.composerHelperIsError = false;
@@ -1623,7 +1671,16 @@ export class VaultAIAssistantView extends ItemView {
       return;
     }
 
+    this.flushVoiceRecorder(recorder);
     recorder.stop();
+  }
+
+  private flushVoiceRecorder(recorder: MediaRecorder): void {
+    try {
+      recorder.requestData();
+    } catch {
+      // Some browser implementations throw if the recorder is already stopping.
+    }
   }
 
   private async transcribeVoiceRecording(audioBlob: Blob): Promise<void> {
@@ -1656,11 +1713,12 @@ export class VaultAIAssistantView extends ItemView {
     this.render();
 
     try {
+      const mediaType = audioBlob.type || "audio/webm";
       const result = await transcribeEnglishAudio({
         apiKey,
         audioData: await audioBlob.arrayBuffer(),
-        mediaType: audioBlob.type || "audio/webm",
-        fileName: "voice-input.webm"
+        mediaType,
+        fileName: getVoiceAudioFileName(mediaType)
       });
       this.composerValue = mergeVoiceTranscriptDraft(this.composerValue, result.text);
       this.composerHelperMessage = "Voice transcript added to composer. Review before sending.";
@@ -1688,6 +1746,13 @@ export class VaultAIAssistantView extends ItemView {
     return (
       error instanceof DOMException &&
       (error.name === "NotAllowedError" || error.name === "PermissionDeniedError")
+    );
+  }
+
+  private isMicrophoneConstraintError(error: unknown): boolean {
+    return (
+      error instanceof DOMException &&
+      (error.name === "OverconstrainedError" || error.name === "ConstraintNotSatisfiedError")
     );
   }
 

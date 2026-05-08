@@ -3,6 +3,21 @@ import { requestUrl, type RequestUrlParam, type RequestUrlResponse } from "obsid
 export const OPENAI_TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
 export const OPENAI_TRANSCRIPTION_LANGUAGE = "en";
 export const OPENAI_TTS_MODEL = "gpt-4o-mini-tts";
+const DEFAULT_VOICE_AUDIO_MEDIA_TYPE = "audio/webm";
+const DEFAULT_VOICE_AUDIO_FILE_NAME = "voice-input.webm";
+const VOICE_AUDIO_FILE_NAME_BY_MEDIA_TYPE: Record<string, string> = {
+  "audio/webm": "voice-input.webm",
+  "video/webm": "voice-input.webm",
+  "audio/mp4": "voice-input.m4a",
+  "audio/x-m4a": "voice-input.m4a",
+  "video/mp4": "voice-input.mp4",
+  "audio/mpeg": "voice-input.mp3",
+  "audio/mp3": "voice-input.mp3",
+  "audio/ogg": "voice-input.ogg",
+  "audio/wav": "voice-input.wav",
+  "audio/wave": "voice-input.wav",
+  "audio/x-wav": "voice-input.wav"
+};
 
 export const OPENAI_SPEECH_VOICES = [
   "alloy",
@@ -179,6 +194,13 @@ export function mergeVoiceTranscriptDraft(draft: string, transcript: string): st
   return `${draft.trimEnd()}\n\n${cleanTranscript}`;
 }
 
+export function getVoiceAudioFileName(mediaType: string): string {
+  return (
+    VOICE_AUDIO_FILE_NAME_BY_MEDIA_TYPE[normalizeMediaType(mediaType)] ??
+    DEFAULT_VOICE_AUDIO_FILE_NAME
+  );
+}
+
 export function createVoiceModeError(
   code: VoiceModeErrorCode,
   message: string,
@@ -256,11 +278,11 @@ function sanitizePartName(value: string): string {
 }
 
 function sanitizeFileName(value: string): string {
-  return value.trim().replace(/["\r\n/\\]/g, "-") || "voice-input.webm";
+  return value.trim().replace(/["\r\n/\\]/g, "-") || DEFAULT_VOICE_AUDIO_FILE_NAME;
 }
 
 function normalizeMediaType(value: string): string {
-  return value.trim() || "audio/webm";
+  return value.split(";")[0]?.trim().toLowerCase() || DEFAULT_VOICE_AUDIO_MEDIA_TYPE;
 }
 
 function extractTextField(value: unknown): string | null {
