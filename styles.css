@@ -2212,7 +2212,8 @@
   text-overflow: ellipsis;
 }
 
-.vault-ai-assistant-model-vision-cue {
+.vault-ai-assistant-model-vision-cue,
+.vault-ai-assistant-model-voice-cue {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -2220,7 +2221,12 @@
   color: var(--text-success);
 }
 
-.vault-ai-assistant-model-vision-cue svg {
+.vault-ai-assistant-model-voice-cue-muted {
+  color: var(--text-faint);
+}
+
+.vault-ai-assistant-model-vision-cue svg,
+.vault-ai-assistant-model-voice-cue svg {
   width: 13px;
   height: 13px;
 }

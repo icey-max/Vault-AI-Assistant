@@ -3,6 +3,7 @@ import type VaultAIAssistantPlugin from "./main";
 import {
   MODEL_OPTIONS,
   modelSupportsImages as optionModelSupportsImages,
+  modelSupportsVoice as optionModelSupportsVoice,
   type ModelOption,
   type ProviderId
 } from "./model-options";
@@ -206,6 +207,10 @@ function isModelOption(provider: ProviderId, model: string): boolean {
 
 export function modelSupportsImages(provider: ProviderId, model: string): boolean {
   return optionModelSupportsImages(provider, model);
+}
+
+export function modelSupportsVoice(provider: ProviderId, model: string): boolean {
+  return optionModelSupportsVoice(provider, model);
 }
 
 export class VaultAIAssistantSettingTab extends PluginSettingTab {

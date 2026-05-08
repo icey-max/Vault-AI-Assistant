@@ -56,6 +56,7 @@ import {
   hasAvailableProviderKey,
   MODEL_OPTIONS,
   modelSupportsImages,
+  modelSupportsVoice,
   ProviderId,
   setSelectedModelForProvider
 } from "./settings";
@@ -1491,18 +1492,33 @@ export class VaultAIAssistantView extends ItemView {
   }
 
   private getVoiceInputState() {
-    const hasOpenAIKey = hasAvailableProviderKey(this.app, this.plugin.settings, "openai");
+    const providerConfig = getActiveProviderConfig(this.plugin.settings);
+    const supportsVoice = modelSupportsVoice(providerConfig.provider, providerConfig.model);
+    const hasProviderKey = hasAvailableProviderKey(
+      this.app,
+      this.plugin.settings,
+      providerConfig.provider
+    );
     const mediaAvailable =
       typeof navigator !== "undefined" &&
       Boolean(navigator.mediaDevices?.getUserMedia) &&
       typeof MediaRecorder !== "undefined";
 
-    if (!hasOpenAIKey) {
+    if (!supportsVoice) {
       return {
         available: false,
         active: this.voiceIsRecording,
         busy: this.voiceIsTranscribing,
-        disabledReason: "OpenAI API key required for voice input"
+        disabledReason: "Selected model does not support voice input"
+      };
+    }
+
+    if (!hasProviderKey) {
+      return {
+        available: false,
+        active: this.voiceIsRecording,
+        busy: this.voiceIsTranscribing,
+        disabledReason: `${providerConfig.label} API key required for voice input`
       };
     }
 
@@ -1618,9 +1634,17 @@ export class VaultAIAssistantView extends ItemView {
       return;
     }
 
-    const apiKey = this.app.secretStorage.getSecret(this.plugin.settings.openaiSecretName);
+    const providerConfig = getActiveProviderConfig(this.plugin.settings);
+    if (!modelSupportsVoice(providerConfig.provider, providerConfig.model)) {
+      this.composerHelperMessage = "Selected model does not support voice input";
+      this.composerHelperIsError = true;
+      this.render();
+      return;
+    }
+
+    const apiKey = this.app.secretStorage.getSecret(providerConfig.secretName);
     if (!apiKey) {
-      this.composerHelperMessage = "OpenAI API key required for voice input";
+      this.composerHelperMessage = `${providerConfig.label} API key required for voice input`;
       this.composerHelperIsError = true;
       this.render();
       return;
@@ -1644,7 +1668,7 @@ export class VaultAIAssistantView extends ItemView {
     } catch (error) {
       this.composerHelperMessage =
         isVoiceModeError(error) && error.code === "missing_openai_key"
-          ? "OpenAI API key required for voice input"
+          ? `${providerConfig.label} API key required for voice input`
           : "Voice transcription failed. Try again or type your message.";
       this.composerHelperIsError = true;
     } finally {

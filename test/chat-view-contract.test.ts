@@ -233,9 +233,16 @@ test("assistant chat view keeps required Phase 8.5 model selector contract", () 
     "setSelectedModelForProvider",
     "await this.plugin.saveSettings()",
     "model.supportsImages",
+    "model.supportsVoice",
     "vault-ai-assistant-model-vision-cue",
+    "vault-ai-assistant-model-voice-cue",
+    "vault-ai-assistant-model-voice-cue-muted",
     "Eye",
+    "Mic",
+    "MicOff",
     "Supports images",
+    "Supports voice input",
+    "Voice input unavailable",
     "selectedModelSupportsImages",
     "disabled={!selectedModelSupportsImages || isStreaming}",
     "Images unavailable for selected model",
@@ -602,7 +609,9 @@ test("assistant chat view routes provider requests through Obsidian requestUrl t
 test("assistant chat view keeps Phase 13 voice mode contract", () => {
   const assistantSource = readFileSync("src/assistant-view.ts", "utf8");
   const composerSource = readFileSync("src/ui/components/composer.tsx", "utf8");
+  const selectorSource = readFileSync("src/ui/components/composer-model-selector.tsx", "utf8");
   const actionsSource = readFileSync("src/ui/components/composer-actions.tsx", "utf8");
+  const modelOptionsSource = readFileSync("src/model-options.ts", "utf8");
   const voiceSource = readFileSync("src/voice-mode.ts", "utf8");
   const settingsSource = readFileSync("src/settings.ts", "utf8");
   const styles = readFileSync("styles.css", "utf8");
@@ -616,13 +625,16 @@ test("assistant chat view keeps Phase 13 voice mode contract", () => {
     "voiceInput",
     "onToggleVoiceInput"
   ]) {
-    assert.match(`${composerSource}\n${actionsSource}`, new RegExp(escapeRegExp(text)));
+    assert.match(`${composerSource}\n${actionsSource}\n${selectorSource}`, new RegExp(escapeRegExp(text)));
   }
 
   for (const text of [
     "startVoiceRecording",
     "transcribeVoiceRecording",
     "navigator.mediaDevices.getUserMedia",
+    "modelSupportsVoice",
+    "Selected model does not support voice input",
+    "providerConfig.label",
     "Review before sending",
     "mergeVoiceTranscriptDraft",
     "Play response aloud",
@@ -640,9 +652,13 @@ test("assistant chat view keeps Phase 13 voice mode contract", () => {
   assert.doesNotMatch(transcriptionHelper, /sendMessage\(/);
   assert.doesNotMatch(voiceSource, /fetch\(/);
   assert.doesNotMatch(voiceSource, /ContextPackage/);
+  assert.match(modelOptionsSource, /supportsVoice: true/);
+  assert.match(modelOptionsSource, /supportsVoice: false/);
   assert.match(settingsSource, /enableSpokenResponses/);
   assert.match(settingsSource, /openaiSpeechVoice/);
+  assert.match(settingsSource, /modelSupportsVoice/);
   assert.match(styles, /\.vault-ai-assistant-voice-action/);
+  assert.match(styles, /\.vault-ai-assistant-model-voice-cue/);
   assert.match(styles, /\.vault-ai-assistant-message-speech/);
   assert.match(readme, /microphone audio/);
   assert.match(readme, /English-only/);
