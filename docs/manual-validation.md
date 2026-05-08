@@ -86,6 +86,17 @@ For each operation, review the proposal before approval and verify no vault writ
 - [ ] Oversized request: attach enough disposable context to exceed practical provider limits and verify the request fails with a recoverable provider error.
 - [ ] Truncated operation response: ask for a large batch of vault operations and verify incomplete provider output becomes a visible recovery error, not a blank response.
 
+## Voice mode
+
+- [ ] Open the assistant in a disposable vault.
+- [ ] Configure an OpenAI key through plugin settings.
+- [ ] Click mic, allow permission, speak English, stop recording.
+- [ ] Verify the transcript appears in the composer and is editable before send.
+- [ ] Send the transcript with Claude selected and verify the reasoning provider remains Claude.
+- [ ] Deny microphone permission and verify the inline helper state.
+- [ ] Enable spoken responses, click play on an assistant message, verify there is no autoplay, and verify Stop works.
+- [ ] Repeat a narrow/mobile layout check and verify mic, image, model, send, and playback controls are not clipped.
+
 ## Release Readiness
 
 - [ ] `README.md` explains setup, safety model, network/data disclosure, and limitations.

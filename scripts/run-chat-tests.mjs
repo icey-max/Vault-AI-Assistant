@@ -8,6 +8,7 @@ import process from "node:process";
 const tempDir = await mkdtemp(path.join(tmpdir(), "vault-ai-chat-tests-"));
 const entrypoint = path.join(tempDir, "chat-tests-entry.mjs");
 const outfile = path.join(tempDir, "chat-tests.cjs");
+const obsidianStub = path.join(tempDir, "obsidian-stub.mjs");
 const testPatterns = ["chat-*.test.ts", "vault-*.test.ts", "system-prompts.test.ts"];
 const nodeTestCommand = "node --test";
 const testRegexes = testPatterns.map(
@@ -23,6 +24,14 @@ try {
     entrypoint,
     testFiles.map((file) => `import ${JSON.stringify(path.resolve(file))};`).join("\n")
   );
+  await writeFile(
+    obsidianStub,
+    [
+      "export async function requestUrl() {",
+      "  throw new Error(\"Obsidian requestUrl is not available in unit tests.\");",
+      "}"
+    ].join("\n")
+  );
 
   await esbuild.build({
     entryPoints: [entrypoint],
@@ -31,7 +40,15 @@ try {
     format: "cjs",
     target: "node18",
     outfile,
-    external: ["node:*"]
+    external: ["node:*"],
+    plugins: [
+      {
+        name: "obsidian-test-stub",
+        setup(build) {
+          build.onResolve({ filter: /^obsidian$/ }, () => ({ path: obsidianStub }));
+        }
+      }
+    ]
   });
 
   const result = spawnSync(process.execPath, [outfile], {

@@ -11,6 +11,7 @@ import {
   normalizeSystemPromptPresetId,
   type SystemPromptPresetId
 } from "./system-prompts";
+import { OPENAI_SPEECH_VOICES, type OpenAISpeechVoice } from "./voice-mode";
 
 export { MODEL_OPTIONS, type ModelOption, type ProviderId };
 
@@ -25,6 +26,8 @@ export interface VaultAIAssistantSettings {
   autoAttachActiveFileContext: boolean;
   chatHistoryRetentionDays: ChatHistoryRetentionDays;
   maxOutputTokens: number;
+  enableSpokenResponses: boolean;
+  openaiSpeechVoice: OpenAISpeechVoice;
 }
 
 export type AssistantViewLocation = "sidebar" | "editor";
@@ -52,7 +55,9 @@ export const DEFAULT_SETTINGS: VaultAIAssistantSettings = {
   assistantViewLocation: "sidebar",
   autoAttachActiveFileContext: false,
   chatHistoryRetentionDays: null,
-  maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS
+  maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+  enableSpokenResponses: false,
+  openaiSpeechVoice: "coral"
 };
 
 export function hasConfiguredProvider(settings: VaultAIAssistantSettings): boolean {
@@ -150,6 +155,8 @@ export function normalizeSettings(settings: VaultAIAssistantSettings): VaultAIAs
     normalized.chatHistoryRetentionDays
   );
   normalized.maxOutputTokens = normalizeOutputTokenLimit(normalized.maxOutputTokens);
+  normalized.enableSpokenResponses = normalized.enableSpokenResponses === true;
+  normalized.openaiSpeechVoice = normalizeOpenAISpeechVoice(normalized.openaiSpeechVoice);
 
   return normalized;
 }
@@ -186,6 +193,13 @@ export function normalizeAssistantViewLocation(value: unknown): AssistantViewLoc
   return value === "editor" ? "editor" : "sidebar";
 }
 
+export function normalizeOpenAISpeechVoice(value: unknown): OpenAISpeechVoice {
+  return typeof value === "string" &&
+    OPENAI_SPEECH_VOICES.includes(value as OpenAISpeechVoice)
+    ? (value as OpenAISpeechVoice)
+    : DEFAULT_SETTINGS.openaiSpeechVoice;
+}
+
 function isModelOption(provider: ProviderId, model: string): boolean {
   return MODEL_OPTIONS[provider].some((option) => option.value === model);
 }
@@ -217,6 +231,7 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
     });
 
     this.addResponseSection();
+    this.addVoiceSection();
     this.addInterfaceSection();
     this.addContextSection();
     this.addChatHistorySection();
@@ -273,6 +288,40 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
         ].join(" ")
       );
     this.renderTokenLimitControl(setting);
+  }
+
+  private addVoiceSection(): void {
+    new Setting(this.containerEl).setName("Voice").setHeading();
+
+    new Setting(this.containerEl)
+      .setName("Spoken response playback")
+      .setDesc(
+        "Adds a per-message play button and sends assistant text for speech only when you click play."
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.enableSpokenResponses)
+          .onChange(async (value) => {
+            this.plugin.settings.enableSpokenResponses = value === true;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(this.containerEl)
+      .setName("Spoken voice")
+      .setDesc("Voice used when spoken response playback is enabled.")
+      .addDropdown((dropdown) => {
+        for (const voice of OPENAI_SPEECH_VOICES) {
+          dropdown.addOption(voice, voice);
+        }
+
+        dropdown
+          .setValue(normalizeOpenAISpeechVoice(this.plugin.settings.openaiSpeechVoice))
+          .onChange(async (value) => {
+            this.plugin.settings.openaiSpeechVoice = normalizeOpenAISpeechVoice(value);
+            await this.plugin.saveSettings();
+          });
+      });
   }
 
   private renderTokenLimitControl(setting: Setting): void {

@@ -599,6 +599,56 @@ test("assistant chat view routes provider requests through Obsidian requestUrl t
   assert.match(transportSource, /new Response/);
 });
 
+test("assistant chat view keeps Phase 13 voice mode contract", () => {
+  const assistantSource = readFileSync("src/assistant-view.ts", "utf8");
+  const composerSource = readFileSync("src/ui/components/composer.tsx", "utf8");
+  const actionsSource = readFileSync("src/ui/components/composer-actions.tsx", "utf8");
+  const voiceSource = readFileSync("src/voice-mode.ts", "utf8");
+  const settingsSource = readFileSync("src/settings.ts", "utf8");
+  const styles = readFileSync("styles.css", "utf8");
+  const readme = readFileSync("README.md", "utf8");
+
+  for (const text of [
+    "vault-ai-assistant-voice-action",
+    "Record voice",
+    "Stop recording",
+    "Transcribing voice",
+    "voiceInput",
+    "onToggleVoiceInput"
+  ]) {
+    assert.match(`${composerSource}\n${actionsSource}`, new RegExp(escapeRegExp(text)));
+  }
+
+  for (const text of [
+    "startVoiceRecording",
+    "transcribeVoiceRecording",
+    "navigator.mediaDevices.getUserMedia",
+    "Review before sending",
+    "mergeVoiceTranscriptDraft",
+    "Play response aloud",
+    "Preparing audio",
+    "Stop playback",
+    "URL.revokeObjectURL"
+  ]) {
+    assert.match(assistantSource, new RegExp(escapeRegExp(text)));
+  }
+
+  const transcriptionHelper = assistantSource.slice(
+    assistantSource.indexOf("private async transcribeVoiceRecording"),
+    assistantSource.indexOf("private stopVoiceStream")
+  );
+  assert.doesNotMatch(transcriptionHelper, /sendMessage\(/);
+  assert.doesNotMatch(voiceSource, /fetch\(/);
+  assert.doesNotMatch(voiceSource, /ContextPackage/);
+  assert.match(settingsSource, /enableSpokenResponses/);
+  assert.match(settingsSource, /openaiSpeechVoice/);
+  assert.match(styles, /\.vault-ai-assistant-voice-action/);
+  assert.match(styles, /\.vault-ai-assistant-message-speech/);
+  assert.match(readme, /microphone audio/);
+  assert.match(readme, /English-only/);
+  assert.match(readme, /spoken responses/);
+});
+
 test("assistant chat view keeps required Phase 4 proposal review contract", () => {
   const source = readFileSync("src/assistant-view.ts", "utf8");
   const styles = readFileSync("styles.css", "utf8");
