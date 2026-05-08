@@ -511,15 +511,20 @@ test("assistant chat view keeps required Phase 6 prompt settings contract", () =
     "getProviderSecretName",
     "getSelectedModelForProvider",
     "setSelectedModelForProvider",
+    "normalizeProviderId",
+    "Chat model",
+    "Chat provider",
+    "Provider used when you send text from the assistant composer.",
+    "Model used for chat responses and vault operation proposals.",
+    "this.addChatModelSection()",
+    "this.plugin.settings.activeProvider = normalizeProviderId(value)",
+    "this.display()",
     "hasAvailableProviderKey(app, settings, settings.activeProvider)",
     "settings.activeProvider = provider"
   ]) {
     assert.match(settings, new RegExp(escapeRegExp(text)));
   }
 
-  assert.doesNotMatch(settings, /setName\("Active provider"\)/);
-  assert.doesNotMatch(settings, /setName\("Model"\)/);
-  assert.doesNotMatch(settings, /setName\("Chat model"\)/);
   assert.doesNotMatch(settings, /Choose the chat model from the composer/);
 
   for (const text of [

@@ -60,6 +60,10 @@ export const DEFAULT_SETTINGS: VaultAIAssistantSettings = {
   openaiSpeechVoice: "coral"
 };
 
+export function normalizeProviderId(value: unknown): ProviderId {
+  return value === "anthropic" ? "anthropic" : "openai";
+}
+
 export function hasConfiguredProvider(settings: VaultAIAssistantSettings): boolean {
   if (settings.activeProvider === "openai") {
     return settings.openaiSecretName.trim().length > 0 && settings.openaiModel.trim().length > 0;
@@ -135,6 +139,8 @@ function hasAvailableSecret(app: App, secretName: string): boolean {
 
 export function normalizeSettings(settings: VaultAIAssistantSettings): VaultAIAssistantSettings {
   const normalized = { ...settings };
+
+  normalized.activeProvider = normalizeProviderId(normalized.activeProvider);
 
   if (!isModelOption("openai", normalized.openaiModel)) {
     normalized.openaiModel = DEFAULT_SETTINGS.openaiModel;
@@ -230,11 +236,52 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
       secretField: "anthropicSecretName"
     });
 
+    this.addChatModelSection();
     this.addResponseSection();
     this.addVoiceSection();
     this.addInterfaceSection();
     this.addContextSection();
     this.addChatHistorySection();
+  }
+
+  private addChatModelSection(): void {
+    new Setting(this.containerEl).setName("Chat model").setHeading();
+    const providerLabels: Record<ProviderId, string> = {
+      openai: "OpenAI",
+      anthropic: "Anthropic"
+    };
+
+    new Setting(this.containerEl)
+      .setName("Chat provider")
+      .setDesc("Provider used when you send text from the assistant composer.")
+      .addDropdown((dropdown) => {
+        dropdown
+          .addOption("openai", providerLabels.openai)
+          .addOption("anthropic", providerLabels.anthropic)
+          .setValue(this.plugin.settings.activeProvider)
+          .onChange(async (value) => {
+            this.plugin.settings.activeProvider = normalizeProviderId(value);
+            await this.plugin.saveSettings();
+            this.display();
+          });
+      });
+
+    new Setting(this.containerEl)
+      .setName("Model")
+      .setDesc("Model used for chat responses and vault operation proposals.")
+      .addDropdown((dropdown) => {
+        const provider = this.plugin.settings.activeProvider;
+        for (const model of MODEL_OPTIONS[provider]) {
+          dropdown.addOption(model.value, model.label);
+        }
+
+        dropdown
+          .setValue(getSelectedModelForProvider(this.plugin.settings, provider))
+          .onChange(async (value) => {
+            setSelectedModelForProvider(this.plugin.settings, provider, value);
+            await this.plugin.saveSettings();
+          });
+      });
   }
 
   private addInterfaceSection(): void {
