@@ -56,7 +56,6 @@ import {
   hasAvailableProviderKey,
   MODEL_OPTIONS,
   modelSupportsImages,
-  modelSupportsVoice,
   ProviderId,
   setSelectedModelForProvider
 } from "./settings";
@@ -82,31 +81,10 @@ import type {
   ComposerChatHistoryRow,
   ComposerSystemPromptOption
 } from "./ui/components/composer-toolbar";
-import {
-  createOpenAISpeechAudio,
-  getVoiceAudioFileName,
-  isVoiceModeError,
-  mergeVoiceTranscriptDraft,
-  transcribeEnglishAudio
-} from "./voice-mode";
 
 export const VAULT_AI_ASSISTANT_VIEW_TYPE = "vault-ai-assistant-view";
 const INCOMPLETE_ORCHESTRATOR_OPERATION_RECOVERY_MESSAGE =
   "The provider returned an incomplete Orchestrator Operation proposal. No vault files were changed. Retry the request or ask for fewer file changes.";
-const VOICE_RECORDER_MIME_TYPES = [
-  "audio/webm;codecs=opus",
-  "audio/webm",
-  "audio/mp4;codecs=mp4a.40.2",
-  "audio/mp4",
-  "audio/ogg;codecs=opus",
-  "audio/ogg"
-] as const;
-const VOICE_RECORDER_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
-  echoCancellation: true,
-  noiseSuppression: true,
-  autoGainControl: true
-};
-const VOICE_RECORDER_TIMESLICE_MS = 1000;
 
 interface MessageScrollSnapshot {
   top: number;
@@ -131,17 +109,6 @@ export class VaultAIAssistantView extends ItemView {
   private composerHelperMessage = "";
   private composerHelperIsError = false;
   private composerScopeMode: ContextAttachmentMode = "context";
-  private voiceRecorder: MediaRecorder | null = null;
-  private voiceRecordingStream: MediaStream | null = null;
-  private voiceChunks: Blob[] = [];
-  private voiceIsRecording = false;
-  private voiceIsTranscribing = false;
-  private voiceShouldTranscribeOnStop = true;
-  private spokenAudio: HTMLAudioElement | null = null;
-  private spokenAudioUrl: string | null = null;
-  private spokenMessageId: string | null = null;
-  private spokenLoadingMessageId: string | null = null;
-  private spokenPlaybackRequestId = 0;
   private outsidePointerDisposers: Array<() => void> = [];
   private reactRoots: Root[] = [];
 
@@ -168,8 +135,6 @@ export class VaultAIAssistantView extends ItemView {
   }
 
   onClose(): Promise<void> {
-    this.stopSpokenPlayback();
-    this.stopVoiceRecording(false);
     this.unmountReactRoots();
     this.clearOutsidePointerDisposers();
     return Promise.resolve();
@@ -260,14 +225,12 @@ export class VaultAIAssistantView extends ItemView {
   }
 
   private async startNewChat(): Promise<void> {
-    this.stopSpokenPlayback();
     await this.plugin.chatStore.newChat();
     this.clearConversationDraftState();
     this.render();
   }
 
   private clearConversationDraftState(): void {
-    this.stopSpokenPlayback();
     this.composerValue = "";
     this.composerHelperMessage = "";
     this.composerHelperIsError = false;
@@ -521,30 +484,6 @@ export class VaultAIAssistantView extends ItemView {
     }
 
     const actions = container.createDiv({ cls: "vault-ai-assistant-message-actions" });
-    if (this.plugin.settings.enableSpokenResponses && message.status === "completed") {
-      const isPlaying = this.spokenMessageId === message.id;
-      const isLoading = this.spokenLoadingMessageId === message.id;
-      const label = isLoading
-        ? "Preparing audio"
-        : isPlaying
-          ? "Stop playback"
-          : "Play response aloud";
-      const play = actions.createEl("button", {
-        cls: `vault-ai-assistant-icon-action vault-ai-assistant-message-speech${
-          isPlaying ? " is-playing" : ""
-        }`
-      });
-      play.type = "button";
-      play.disabled = isLoading;
-      setIcon(play, isPlaying ? "square" : "volume-2");
-      setIconActionLabel(play, label);
-      play.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        void this.toggleSpokenPlayback(message);
-      });
-    }
-
     const copy = actions.createEl("button", {
       cls: "vault-ai-assistant-icon-action vault-ai-assistant-message-copy"
     });
@@ -573,107 +512,6 @@ export class VaultAIAssistantView extends ItemView {
         setIconActionLabel(button, "Copy response");
       }, 1200);
     }
-  }
-
-  private async toggleSpokenPlayback(message: ChatMessage): Promise<void> {
-    if (this.spokenMessageId === message.id) {
-      this.stopSpokenPlayback();
-      this.render();
-      return;
-    }
-
-    if (this.spokenLoadingMessageId === message.id) {
-      return;
-    }
-
-    const apiKey = this.app.secretStorage.getSecret(this.plugin.settings.openaiSecretName);
-    if (!apiKey) {
-      this.composerHelperMessage = "OpenAI API key is required for spoken responses.";
-      this.composerHelperIsError = true;
-      this.render();
-      return;
-    }
-
-    this.stopSpokenPlayback();
-    const requestId = this.spokenPlaybackRequestId + 1;
-    this.spokenPlaybackRequestId = requestId;
-    this.spokenLoadingMessageId = message.id;
-    this.composerHelperMessage = "";
-    this.composerHelperIsError = false;
-    this.render();
-
-    try {
-      const speech = await createOpenAISpeechAudio({
-        apiKey,
-        input: message.content,
-        voice: this.plugin.settings.openaiSpeechVoice
-      });
-      if (requestId !== this.spokenPlaybackRequestId) {
-        return;
-      }
-
-      const audioUrl = URL.createObjectURL(
-        new Blob([speech.audioData], { type: speech.mediaType })
-      );
-      const audio = new Audio(audioUrl);
-      audio.addEventListener(
-        "ended",
-        () => {
-          if (this.spokenAudio === audio) {
-            this.stopSpokenPlayback(false);
-            this.render();
-          }
-        },
-        { once: true }
-      );
-      audio.addEventListener(
-        "error",
-        () => {
-          if (this.spokenAudio === audio) {
-            this.stopSpokenPlayback(false);
-            this.composerHelperMessage = "Spoken response playback failed.";
-            this.composerHelperIsError = true;
-            this.render();
-          }
-        },
-        { once: true }
-      );
-
-      this.spokenAudio = audio;
-      this.spokenAudioUrl = audioUrl;
-      this.spokenMessageId = message.id;
-      this.spokenLoadingMessageId = null;
-      await audio.play();
-      this.render();
-    } catch {
-      if (requestId === this.spokenPlaybackRequestId) {
-        this.stopSpokenPlayback(false);
-        this.composerHelperMessage = "Spoken response playback failed.";
-        this.composerHelperIsError = true;
-        this.render();
-      }
-    }
-  }
-
-  private stopSpokenPlayback(cancelPending = true): void {
-    if (cancelPending) {
-      this.spokenPlaybackRequestId += 1;
-    }
-
-    if (this.spokenAudio) {
-      this.spokenAudio.pause();
-      this.spokenAudio.removeAttribute("src");
-      this.spokenAudio.load();
-    }
-
-    if (this.spokenAudioUrl) {
-      URL.revokeObjectURL(this.spokenAudioUrl);
-    }
-
-    this.spokenAudio = null;
-    this.spokenAudioUrl = null;
-    this.spokenMessageId = null;
-    this.spokenLoadingMessageId = null;
   }
 
   private renderContextUsed(
@@ -1084,7 +922,6 @@ export class VaultAIAssistantView extends ItemView {
         imageAttachments: this.imageAttachments,
         modelSelector: this.getComposerModelSelectorState(),
         selectedModelSupportsImages,
-        voiceInput: this.getVoiceInputState(),
         chatHistoryOpen: this.chatHistoryOpen,
         chatSettingsOpen: this.chatSettingsOpen,
         chatHistoryLoading: this.chatHistoryLoading,
@@ -1108,9 +945,6 @@ export class VaultAIAssistantView extends ItemView {
         },
         onAttachImageFiles: (files) => {
           void this.attachExternalImageFiles(files);
-        },
-        onToggleVoiceInput: () => {
-          void this.toggleVoiceInput();
         },
         onScopeModeChange: (mode) => {
           this.composerScopeMode = mode;
@@ -1469,7 +1303,6 @@ export class VaultAIAssistantView extends ItemView {
   }
 
   private async openSavedConversation(filePath: string): Promise<void> {
-    this.stopSpokenPlayback();
     const conversation = await this.plugin.chatStore.openConversation(filePath);
     if (!conversation) {
       return;
@@ -1504,256 +1337,6 @@ export class VaultAIAssistantView extends ItemView {
       includeActiveFile: enabled,
       includeActiveFileDirectory: enabled
     };
-  }
-
-  private getVoiceInputState() {
-    const providerConfig = getActiveProviderConfig(this.plugin.settings);
-    const supportsVoice = modelSupportsVoice(providerConfig.provider, providerConfig.model);
-    const hasProviderKey = hasAvailableProviderKey(
-      this.app,
-      this.plugin.settings,
-      providerConfig.provider
-    );
-    const mediaAvailable =
-      typeof navigator !== "undefined" &&
-      Boolean(navigator.mediaDevices?.getUserMedia) &&
-      typeof MediaRecorder !== "undefined";
-
-    if (!supportsVoice) {
-      return {
-        available: false,
-        active: this.voiceIsRecording,
-        busy: this.voiceIsTranscribing,
-        disabledReason: "Selected model does not support voice input"
-      };
-    }
-
-    if (!hasProviderKey) {
-      return {
-        available: false,
-        active: this.voiceIsRecording,
-        busy: this.voiceIsTranscribing,
-        disabledReason: `${providerConfig.label} API key required for voice input`
-      };
-    }
-
-    if (!mediaAvailable) {
-      return {
-        available: false,
-        active: this.voiceIsRecording,
-        busy: this.voiceIsTranscribing,
-        disabledReason: "Voice input unavailable in this Obsidian environment"
-      };
-    }
-
-    return {
-      available: true,
-      active: this.voiceIsRecording,
-      busy: this.voiceIsTranscribing,
-      disabledReason: ""
-    };
-  }
-
-  private async toggleVoiceInput(): Promise<void> {
-    if (this.voiceIsRecording) {
-      this.stopVoiceRecording();
-      return;
-    }
-
-    await this.startVoiceRecording();
-  }
-
-  private async getVoiceMediaStream(): Promise<MediaStream> {
-    try {
-      return await navigator.mediaDevices.getUserMedia({
-        audio: VOICE_RECORDER_AUDIO_CONSTRAINTS
-      });
-    } catch (error) {
-      if (!this.isMicrophoneConstraintError(error)) {
-        throw error;
-      }
-
-      return navigator.mediaDevices.getUserMedia({ audio: true });
-    }
-  }
-
-  private getVoiceRecorderOptions(): MediaRecorderOptions | undefined {
-    if (
-      typeof MediaRecorder === "undefined" ||
-      typeof MediaRecorder.isTypeSupported !== "function"
-    ) {
-      return undefined;
-    }
-
-    for (const mimeType of VOICE_RECORDER_MIME_TYPES) {
-      if (MediaRecorder.isTypeSupported(mimeType)) {
-        return { mimeType };
-      }
-    }
-
-    return undefined;
-  }
-
-  private async startVoiceRecording(): Promise<void> {
-    if (this.activeAbortController || this.voiceIsTranscribing) {
-      return;
-    }
-
-    const voiceInput = this.getVoiceInputState();
-    if (!voiceInput.available) {
-      this.composerHelperMessage = voiceInput.disabledReason;
-      this.composerHelperIsError = true;
-      this.render();
-      return;
-    }
-
-    try {
-      const stream = await this.getVoiceMediaStream();
-      this.voiceRecordingStream = stream;
-      const recorderOptions = this.getVoiceRecorderOptions();
-      const recorder = new MediaRecorder(stream, recorderOptions);
-      this.voiceRecorder = recorder;
-      this.voiceChunks = [];
-      this.voiceShouldTranscribeOnStop = true;
-      recorder.addEventListener("dataavailable", (event: BlobEvent) => {
-        if (event.data.size > 0) {
-          this.voiceChunks.push(event.data);
-        }
-      });
-      recorder.addEventListener("stop", () => {
-        const chunks = this.voiceChunks;
-        const mediaType =
-          chunks[0]?.type || recorder.mimeType || recorderOptions?.mimeType || "audio/webm";
-        const audioBlob = new Blob(chunks, { type: mediaType });
-        const shouldTranscribe = this.voiceShouldTranscribeOnStop;
-        this.voiceRecorder = null;
-        this.voiceChunks = [];
-        this.voiceIsRecording = false;
-        this.voiceShouldTranscribeOnStop = true;
-        this.stopVoiceStream();
-        if (shouldTranscribe) {
-          void this.transcribeVoiceRecording(audioBlob);
-        }
-      });
-      recorder.start(VOICE_RECORDER_TIMESLICE_MS);
-      this.voiceIsRecording = true;
-      this.composerHelperMessage = "Recording voice...";
-      this.composerHelperIsError = false;
-      this.render();
-    } catch (error) {
-      this.voiceRecorder = null;
-      this.voiceChunks = [];
-      this.voiceIsRecording = false;
-      this.stopVoiceStream();
-      this.composerHelperMessage = this.isMicrophonePermissionError(error)
-        ? "Microphone permission was denied."
-        : "Voice recording failed. Try again or type your message.";
-      this.composerHelperIsError = true;
-      this.render();
-    }
-  }
-
-  private stopVoiceRecording(transcribe = true): void {
-    const recorder = this.voiceRecorder;
-    if (!recorder) {
-      return;
-    }
-
-    if (!transcribe) {
-      this.voiceShouldTranscribeOnStop = false;
-      if (recorder.state !== "inactive") {
-        recorder.stop();
-      }
-      return;
-    }
-
-    if (recorder.state === "inactive") {
-      return;
-    }
-
-    this.flushVoiceRecorder(recorder);
-    recorder.stop();
-  }
-
-  private flushVoiceRecorder(recorder: MediaRecorder): void {
-    try {
-      recorder.requestData();
-    } catch {
-      // Some browser implementations throw if the recorder is already stopping.
-    }
-  }
-
-  private async transcribeVoiceRecording(audioBlob: Blob): Promise<void> {
-    if (audioBlob.size === 0) {
-      this.composerHelperMessage = "Voice recording did not capture audio. Try again.";
-      this.composerHelperIsError = true;
-      this.render();
-      return;
-    }
-
-    const providerConfig = getActiveProviderConfig(this.plugin.settings);
-    if (!modelSupportsVoice(providerConfig.provider, providerConfig.model)) {
-      this.composerHelperMessage = "Selected model does not support voice input";
-      this.composerHelperIsError = true;
-      this.render();
-      return;
-    }
-
-    const apiKey = this.app.secretStorage.getSecret(providerConfig.secretName);
-    if (!apiKey) {
-      this.composerHelperMessage = `${providerConfig.label} API key required for voice input`;
-      this.composerHelperIsError = true;
-      this.render();
-      return;
-    }
-
-    this.voiceIsTranscribing = true;
-    this.composerHelperMessage = "Transcribing voice...";
-    this.composerHelperIsError = false;
-    this.render();
-
-    try {
-      const mediaType = audioBlob.type || "audio/webm";
-      const result = await transcribeEnglishAudio({
-        apiKey,
-        audioData: await audioBlob.arrayBuffer(),
-        mediaType,
-        fileName: getVoiceAudioFileName(mediaType)
-      });
-      this.composerValue = mergeVoiceTranscriptDraft(this.composerValue, result.text);
-      this.composerHelperMessage = "Voice transcript added to composer. Review before sending.";
-      this.composerHelperIsError = false;
-    } catch (error) {
-      this.composerHelperMessage =
-        isVoiceModeError(error) && error.code === "missing_openai_key"
-          ? `${providerConfig.label} API key required for voice input`
-          : "Voice transcription failed. Try again or type your message.";
-      this.composerHelperIsError = true;
-    } finally {
-      this.voiceIsTranscribing = false;
-      this.render();
-    }
-  }
-
-  private stopVoiceStream(): void {
-    for (const track of this.voiceRecordingStream?.getTracks() ?? []) {
-      track.stop();
-    }
-    this.voiceRecordingStream = null;
-  }
-
-  private isMicrophonePermissionError(error: unknown): boolean {
-    return (
-      error instanceof DOMException &&
-      (error.name === "NotAllowedError" || error.name === "PermissionDeniedError")
-    );
-  }
-
-  private isMicrophoneConstraintError(error: unknown): boolean {
-    return (
-      error instanceof DOMException &&
-      (error.name === "OverconstrainedError" || error.name === "ConstraintNotSatisfiedError")
-    );
   }
 
   private async sendMessage(content: string): Promise<void> {

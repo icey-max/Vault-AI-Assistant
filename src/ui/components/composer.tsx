@@ -1,9 +1,5 @@
 import * as React from "react";
-import {
-  ComposerActions,
-  type ComposerModelSelectorState,
-  type ComposerVoiceInputState
-} from "./composer-actions";
+import { ComposerActions, type ComposerModelSelectorState } from "./composer-actions";
 import { ComposerAttachmentBar } from "./composer-attachment-bar";
 import { ComposerInput } from "./composer-input";
 import {
@@ -29,7 +25,6 @@ export interface ComposerProps {
   imageAttachments: ChatImageAttachment[];
   modelSelector: ComposerModelSelectorState;
   selectedModelSupportsImages: boolean;
-  voiceInput: ComposerVoiceInputState;
   chatHistoryOpen: boolean;
   chatSettingsOpen: boolean;
   chatHistoryLoading: boolean;
@@ -42,7 +37,6 @@ export interface ComposerProps {
   onSubmit: (value: string) => void;
   onStop: () => void;
   onAttachImageFiles: (files: File[]) => void;
-  onToggleVoiceInput: () => void;
   onScopeModeChange: (mode: ContextAttachmentMode) => void;
   onAddContext: () => void;
   onAddScope: () => void;
@@ -72,7 +66,6 @@ export function Composer({
   imageAttachments,
   modelSelector,
   selectedModelSupportsImages,
-  voiceInput,
   chatHistoryOpen,
   chatSettingsOpen,
   chatHistoryLoading,
@@ -85,7 +78,6 @@ export function Composer({
   onSubmit,
   onStop,
   onAttachImageFiles,
-  onToggleVoiceInput,
   onScopeModeChange,
   onAddContext,
   onAddScope,
@@ -180,11 +172,9 @@ export function Composer({
             isStreaming={isStreaming}
             canSend={localCanSend}
             selectedModelSupportsImages={selectedModelSupportsImages}
-            voiceInput={voiceInput}
             onToggleModelPicker={onToggleModelPicker}
             onSelectModel={onSelectModel}
             onAttachImageFiles={onAttachImageFiles}
-            onToggleVoiceInput={onToggleVoiceInput}
             onSubmit={submitCurrentValue}
             onStop={onStop}
           />

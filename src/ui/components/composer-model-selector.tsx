@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Check, ChevronsUpDown, Eye, Mic, MicOff } from "lucide-react";
+import { Check, ChevronsUpDown, Eye } from "lucide-react";
 import { Button } from "./button";
 import { cn } from "../lib/utils";
 import type { ModelOption, ProviderId } from "../../settings";
@@ -36,10 +36,6 @@ export function ComposerModelSelector({
     activeProviderGroup?.models.find(
       (model) => model.value === activeProviderGroup.selectedModel
     )?.supportsImages === true;
-  const currentModelSupportsVoice =
-    activeProviderGroup?.models.find(
-      (model) => model.value === activeProviderGroup.selectedModel
-    )?.supportsVoice === true;
 
   return (
     <>
@@ -65,23 +61,6 @@ export function ComposerModelSelector({
             <Eye size={14} strokeWidth={1.8} aria-hidden="true" />
           </span>
         ) : null}
-        <span
-          className={cn(
-            "vault-ai-assistant-model-voice-cue",
-            !currentModelSupportsVoice && "vault-ai-assistant-model-voice-cue-muted",
-            "vault-ai-assistant-model-selector-capability"
-          )}
-          aria-label={
-            currentModelSupportsVoice ? "Supports voice input" : "Voice input unavailable"
-          }
-          title={currentModelSupportsVoice ? "Supports voice input" : "Voice input unavailable"}
-        >
-          {currentModelSupportsVoice ? (
-            <Mic size={14} strokeWidth={1.8} aria-hidden="true" />
-          ) : (
-            <MicOff size={14} strokeWidth={1.8} aria-hidden="true" />
-          )}
-        </span>
         <span className="vault-ai-assistant-model-selector-icon" aria-hidden="true">
           <ChevronsUpDown size={16} strokeWidth={1.8} />
         </span>
@@ -132,26 +111,6 @@ export function ComposerModelSelector({
                             <Eye size={13} strokeWidth={1.8} aria-hidden="true" />
                           </span>
                         ) : null}
-                        <span
-                          className={cn(
-                            "vault-ai-assistant-model-voice-cue",
-                            !model.supportsVoice && "vault-ai-assistant-model-voice-cue-muted"
-                          )}
-                          aria-label={
-                            model.supportsVoice
-                              ? "Supports voice input"
-                              : "Voice input unavailable"
-                          }
-                          title={
-                            model.supportsVoice ? "Supports voice input" : "Voice input unavailable"
-                          }
-                        >
-                          {model.supportsVoice ? (
-                            <Mic size={13} strokeWidth={1.8} aria-hidden="true" />
-                          ) : (
-                            <MicOff size={13} strokeWidth={1.8} aria-hidden="true" />
-                          )}
-                        </span>
                       </span>
                     </span>
                   </button>

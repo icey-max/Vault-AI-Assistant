@@ -19,8 +19,6 @@ This is an alpha release. Use it on a test vault first and review proposed file 
 - Supported approved operations include creating folders, creating notes, modifying notes, appending notes, deleting notes/folders, moving or renaming notes/folders, and copying notes.
 - Built-in system prompts can be edited from markdown files under `vault-ai-assistant/system-prompts`.
 - Custom markdown files added under `vault-ai-assistant/system-prompts` appear as selectable system prompts in chat settings.
-- Record English voice dictation into the composer, review the transcript, and send it through the selected chat model.
-- Optionally enable spoken responses so assistant text can be played aloud on demand.
 - Saved chat history is stored locally in the vault under `vault-ai-assistant/conversations`.
 
 ## Context and Edit Targets
@@ -60,8 +58,6 @@ The data sent to the selected provider may include:
 - Edit target path hints, such as folder or note paths, without hidden file contents unless those files are also attached as context.
 - Proposed operation history paths and statuses when needed for follow-up grounding.
 
-Voice mode has a separate audio data flow. When you record voice input, microphone audio is sent to OpenAI transcription with an English-only language hint, and the resulting transcript is inserted into the composer for review before you send it. The selected chat provider still handles reasoning after you send the transcript, so Claude can answer a transcribed prompt even though OpenAI handled transcription. If spoken responses are enabled and you click play on an assistant message, that assistant response text is sent to OpenAI text-to-speech only for that explicit playback action.
-
 The plugin does not run its own backend service and does not intentionally collect analytics or telemetry. Provider-side retention, logging, and training behavior are controlled by the provider and your provider account settings.
 
 ## Setup
@@ -77,7 +73,6 @@ For first use, test in a non-critical vault so you can validate the approval flo
 ## Limitations
 
 - The assistant can only ground vault-specific answers in context you provide.
-- Voice processing is English-only in this phase and depends on browser/Obsidian microphone and audio playback API availability.
 - Folder copy is not supported in this alpha.
 - The plugin can propose broad modifications if you ask for them; review diffs before applying.
 - AI provider responses may be incomplete or incorrect. The plugin validates operation shape and file safety, but it cannot guarantee model reasoning quality.

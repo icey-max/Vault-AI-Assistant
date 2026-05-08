@@ -1172,9 +1172,6 @@ test("provider model options use current predefined defaults", () => {
   for (const staleModel of ["claude-sonnet-4-0", "gpt-5-mini"]) {
     assert.doesNotMatch(source, new RegExp(escapeRegExp(staleModel)));
   }
-
-  assert.match(source, /supportsVoice: true/);
-  assert.match(source, /supportsVoice: false/);
 });
 
 test("provider adapters require an explicit Obsidian-safe transport", () => {

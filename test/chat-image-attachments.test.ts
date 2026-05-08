@@ -12,7 +12,7 @@ import {
   persistImageAttachment,
   readPersistedImageAttachmentData
 } from "../src/image-attachments";
-import { modelSupportsImages, modelSupportsVoice } from "../src/model-options";
+import { modelSupportsImages } from "../src/model-options";
 
 test("image attachment helpers map supported media types", () => {
   assert.equal(getImageMediaType("Sketch.png"), "image/png");
@@ -145,10 +145,4 @@ test("modelSupportsImages returns true for configured defaults", () => {
 test("modelSupportsImages returns false for unknown models", () => {
   assert.equal(modelSupportsImages("openai", "unknown-model"), false);
   assert.equal(modelSupportsImages("anthropic", "unknown-model"), false);
-});
-
-test("modelSupportsVoice reflects provider voice support", () => {
-  assert.equal(modelSupportsVoice("openai", "gpt-5.4-mini"), true);
-  assert.equal(modelSupportsVoice("anthropic", "claude-sonnet-4-6"), false);
-  assert.equal(modelSupportsVoice("openai", "unknown-model"), false);
 });
