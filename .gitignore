@@ -48,7 +48,8 @@ User_share/
 *.mov
 *.avif
 *.heic
-!docs/assets/view.png
+!docs/assets/assistant-in-editor.gif
+!docs/assets/assistant-in-sidebar.gif
 
 # Private keys, tokens, and local data stores
 *.key

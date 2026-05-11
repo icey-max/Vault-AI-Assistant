@@ -1907,6 +1907,7 @@
   min-height: 88px;
   max-height: 180px;
   overflow: hidden;
+  padding-inline: 3px;
   color: var(--text-normal);
   font-family: inherit;
   font-size: 14px;
@@ -1924,7 +1925,7 @@
   width: 100%;
   min-height: 88px;
   max-height: 180px;
-  padding: 0;
+  padding: 0 3px;
   border: 0;
   color: transparent;
   caret-color: var(--text-normal);

@@ -6,7 +6,13 @@ This is an alpha release. Use it on a test vault first and review proposed file 
 
 ## Preview
 
-![Vault AI Assistant chat view in Obsidian](docs/assets/view.png)
+### Sidebar
+
+![Vault AI Assistant running in the Obsidian sidebar](docs/assets/assistant-in-sidebar.gif)
+
+### Editor
+
+![Vault AI Assistant running in an Obsidian editor tab](docs/assets/assistant-in-editor.gif)
 
 ## Features
 
