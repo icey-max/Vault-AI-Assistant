@@ -13,7 +13,7 @@ This is an alpha release. Use it on a dedicated test vault first, keep backups, 
 
 | Editor Tab  | Side tab |
 | --- | --- |
-| <img src="docs/assets/assistant-in-editorr.gif" alt="Vault AI Assistant running in the Obsidian sidebar" width="360"> | <img src="docs/assets/assistant-in-sidebar.gif" alt="Vault AI Assistant running in an Obsidian editor tab" width="560"> |
+| <img src="docs/assets/assistant-in-editorr.gif" alt="Vault AI Assistant running in the Obsidian sidebar" width="560"> | <img src="docs/assets/assistant-in-sidebar.gif" alt="Vault AI Assistant running in an Obsidian editor tab" width="360"> |
 
 ## What It Does
 
