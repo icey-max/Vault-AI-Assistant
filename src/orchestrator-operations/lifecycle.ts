@@ -95,6 +95,11 @@ function hasDirectVaultOperationIntent(
       normalized
     );
   const explicitVaultChangeIntent = hasVaultChangeVerb(normalized) && mentionsVaultTarget;
+  const setupStructureIntent = hasSetupStructureIntent(
+    normalized,
+    contextFileCount,
+    targetCount
+  );
   // Orchestrator Operations can be enabled by context-file edit intent over an attached note.
   const contextFileEditIntent =
     contextFileCount > 0 &&
@@ -103,7 +108,7 @@ function hasDirectVaultOperationIntent(
     targetCount > 0 &&
     hasVaultChangeVerb(normalized);
 
-  return explicitVaultChangeIntent || contextFileEditIntent || targetEditIntent;
+  return explicitVaultChangeIntent || setupStructureIntent || contextFileEditIntent || targetEditIntent;
 }
 
 function hasVaultChangeVerb(normalizedMessage: string): boolean {
@@ -117,6 +122,27 @@ function hasVaultChangeVerb(normalizedMessage: string): boolean {
   );
 }
 
+function hasSetupStructureIntent(
+  normalizedMessage: string,
+  contextFileCount: number,
+  targetCount: number
+): boolean {
+  if (contextFileCount === 0 && targetCount === 0) {
+    return false;
+  }
+
+  const setupVerb =
+    /\b(build|create|design|generate|give|make|prepare|provide|scaffold|write)\b/.test(
+      normalizedMessage
+    ) || /\bset\s+(?:it|this|that|them)?\s*up\b/.test(normalizedMessage);
+  const structureNoun =
+    /\b(reading system|system|structure|dashboard|homepage|home page|reading log|chapter notes|key ideas|quotes|action items|review)\b/.test(
+      normalizedMessage
+    );
+
+  return setupVerb && structureNoun;
+}
+
 function isOperationRetryOrConfirmation(message: string): boolean {
   const normalized = message.toLowerCase().trim();
   if (!normalized) {
@@ -125,7 +151,7 @@ function isOperationRetryOrConfirmation(message: string): boolean {
 
   return (
     /^(yes|yep|yeah|correct|exactly|perfect|sure|ok|okay)\b/.test(normalized) ||
-    /\b(go ahead|please do|do it|try again|retry|like this|works now|work now|set it up|set this up)\b/.test(
+    /\b(another go|another try|give it another try|go ahead|have another go|please do|do it|try again|try now|retry|like this|works now|work now|set it up|set this up)\b/.test(
       normalized
     )
   );
@@ -156,6 +182,9 @@ function hasAssistantOperationAttempt(message: OrchestratorOperationIntentHistor
     text.includes("orchestrator operation proposal") ||
     text.includes("vault operation proposal") ||
     text.includes("proposed changes") ||
+    text.includes("proposed structure") ||
+    text.includes("propose edits") ||
+    text.includes("propose the actual file contents") ||
     text.includes("propose_vault_operations")
   );
 }

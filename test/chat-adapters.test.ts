@@ -3,9 +3,15 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { ContextPackage } from "../src/context-utils";
 import { ChatEvent, ChatRequest } from "../src/chat-types";
+import { sanitizeDiagnosticValue } from "../src/diagnostics";
 import { AnthropicChatAdapter } from "../src/providers/anthropic-adapter";
 import { OpenAIChatAdapter } from "../src/providers/openai-adapter";
 import { VAULT_EDITOR_SYSTEM_PROMPT } from "../src/system-prompts";
+
+interface DiagnosticLogEntry {
+  event: string;
+  details?: Record<string, unknown>;
+}
 
 const contextPackage: ContextPackage = {
   files: [
@@ -515,6 +521,20 @@ test("cross-provider consistency: OpenAIChatAdapter normalizes response.function
     name: "propose_vault_operations"
   });
   assert.equal(body.parallel_tool_calls, false);
+  const openAITool = body.tools[0];
+  const openAIParameters = openAITool.parameters;
+  const openAIOperations = openAIParameters.properties.operations;
+  const openAIOperationItems = openAIOperations.items;
+  assert.equal(openAITool.strict, true);
+  assert.deepEqual(openAIParameters.required, ["summary", "operations"]);
+  assert.equal(openAIOperations.minItems, undefined);
+  assert.deepEqual(
+    openAIOperationItems.required,
+    Object.keys(openAIOperationItems.properties)
+  );
+  assert.ok(openAIOperationItems.required.includes("id"));
+  assert.deepEqual(openAIOperationItems.properties.id.type, ["string", "null"]);
+  assert.deepEqual(openAIOperationItems.properties.appendMode.enum, ["end", null]);
   assert.match(capturedBody, /propose_vault_operations/);
   assert.doesNotMatch(capturedBody, /test-api-key/);
 });
@@ -559,6 +579,118 @@ test("OpenAIChatAdapter expands create_note proposals from attached template con
     return;
   }
   assert.equal(operation.content, "# Strategy 1\n\n## Summary\n");
+});
+
+test("OpenAIChatAdapter surfaces blank operation completions as recovery errors", async () => {
+  const logs: DiagnosticLogEntry[] = [];
+  const adapter = new OpenAIChatAdapter(async () =>
+    new Response(
+      streamText([
+        sse({ type: "response.created", response: { id: "resp_1" } }),
+        sse({ type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } })
+      ]),
+      { status: 200 }
+    )
+  );
+
+  const events = await collectEvents(
+    adapter.stream(
+      {
+        ...createVaultOperationRequest(),
+        diagnostics: createDiagnostics(logs),
+        diagnosticRequestId: "diag-blank"
+      },
+      new AbortController().signal
+    )
+  );
+
+  assert.deepEqual(
+    events.map((event) => event.type),
+    ["start", "error"]
+  );
+  const error = events.find((event): event is Extract<ChatEvent, { type: "error" }> => event.type === "error");
+  assert.match(error?.message ?? "", /without returning an Orchestrator Operation proposal/);
+  assert.match(error?.message ?? "", /No vault files were changed/);
+  assert.ok(logs.some((entry) => entry.event === "openai.operation_missing"));
+  assert.ok(logs.some((entry) => entry.event === "openai.tool_schema"));
+});
+
+test("OpenAIChatAdapter emits redacted diagnostics for operation streams", async () => {
+  const logs: DiagnosticLogEntry[] = [];
+  const proposalArguments = JSON.stringify({
+    summary: "Prepare notes",
+    operations: [
+      {
+        type: "create_note",
+        path: "Notes/New.md",
+        description: "Create a new note",
+        content: "# Very private note text"
+      }
+    ]
+  });
+  const adapter = new OpenAIChatAdapter(async () =>
+    new Response(
+      streamText([
+        sse({ type: "response.created", response: { id: "resp_1" } }),
+        sse({
+          type: "response.function_call_arguments.done",
+          name: "propose_vault_operations",
+          arguments: proposalArguments
+        }),
+        sse({ type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } })
+      ]),
+      { status: 200 }
+    )
+  );
+
+  const events = await collectEvents(
+    adapter.stream(
+      {
+        ...createVaultOperationRequest(),
+        apiKey: "sk-proj-testsecret123456789",
+        diagnostics: createDiagnostics(logs),
+        diagnosticRequestId: "diag-valid"
+      },
+      new AbortController().signal
+    )
+  );
+  const proposal = events.find((event): event is Extract<ChatEvent, { type: "proposal" }> => event.type === "proposal");
+  const eventNames = new Set(logs.map((entry) => entry.event));
+  const toolSchema = logs.find((entry) => entry.event === "openai.tool_schema");
+  const proposalLog = logs.find((entry) => entry.event === "openai.proposal_validated");
+  const serializedLogs = JSON.stringify(logs);
+
+  assert.ok(proposal);
+  assert.ok(eventNames.has("openai.request"));
+  assert.ok(eventNames.has("openai.response"));
+  assert.ok(eventNames.has("openai.stream_event"));
+  assert.ok(eventNames.has("openai.function_arguments_done"));
+  assert.equal(toolSchema?.details?.operationRequiredIncludesId, true);
+  assert.deepEqual(proposalLog?.details?.operationTypes, ["create_note"]);
+  assert.deepEqual(proposalLog?.details?.operationPaths, ["Notes/New.md"]);
+  assert.doesNotMatch(serializedLogs, /sk-proj-testsecret123456789/);
+  assert.doesNotMatch(serializedLogs, /Very private note text/);
+});
+
+test("diagnostic sanitizer keeps paths and counts while redacting secrets and content", () => {
+  assert.deepEqual(
+    sanitizeDiagnosticValue({
+      contextFileCount: 1,
+      contextPaths: ["Notes/Alpha.md"],
+      operationTargetPaths: ["Books"],
+      apiKey: "sk-proj-testsecret123456789",
+      content: "# Hidden note body",
+      text: "Hidden prompt text"
+    }),
+    {
+      contextFileCount: 1,
+      contextPaths: ["Notes/Alpha.md"],
+      operationTargetPaths: ["Books"],
+      apiKey: "[redacted]",
+      content: "[redacted]",
+      text: "[redacted]"
+    }
+  );
 });
 
 test("cross-provider consistency: native tools normalize expanded operation proposals", async () => {
@@ -1012,6 +1144,12 @@ test("cross-provider consistency: AnthropicChatAdapter normalizes input_json_del
     disable_parallel_tool_use: true
   });
   assert.match(JSON.stringify(body.tools[0]), /input_schema/);
+  assert.deepEqual(body.tools[0].input_schema.properties.operations.items.required, [
+    "type",
+    "path",
+    "description"
+  ]);
+  assert.equal(body.tools[0].input_schema.properties.operations.minItems, 1);
   assert.match(capturedBody, /propose_vault_operations/);
   assert.doesNotMatch(capturedBody, /test-api-key/);
 });
@@ -1569,6 +1707,14 @@ async function collectEvents(events: AsyncIterable<ChatEvent>): Promise<ChatEven
     result.push(event);
   }
   return result;
+}
+
+function createDiagnostics(logs: DiagnosticLogEntry[]): { log(event: string, details?: Record<string, unknown>): void } {
+  return {
+    log(event: string, details?: Record<string, unknown>): void {
+      logs.push({ event, details });
+    }
+  };
 }
 
 function streamText(chunks: string[]): ReadableStream<Uint8Array> {

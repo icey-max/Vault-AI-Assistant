@@ -4,6 +4,7 @@ import {
   formatInvalidOrchestratorOperationMessage,
   handleOrchestratorOperationPayload,
   INVALID_ORCHESTRATOR_OPERATION_MESSAGE,
+  type VaultOperationProposal,
   type VaultOperationToolSchema
 } from "../orchestrator-operations";
 import { formatProviderHttpError } from "../provider-errors";
@@ -46,6 +47,9 @@ type OpenAIContentPart =
   | { type: "input_text"; text: string }
   | { type: "input_image"; image_url: string; detail?: "auto" };
 
+const INCOMPLETE_OPENAI_OPERATION_MESSAGE =
+  "OpenAI completed without returning an Orchestrator Operation proposal. No vault files were changed. Retry the request or ask for fewer or smaller file changes.";
+
 export class OpenAIChatAdapter implements ChatAdapter {
   private fetchImpl: ChatFetch;
 
@@ -54,6 +58,7 @@ export class OpenAIChatAdapter implements ChatAdapter {
   }
 
   async *stream(request: ChatRequest, signal: AbortSignal): AsyncIterable<ChatEvent> {
+    let operationTool: Record<string, unknown> | undefined;
     const body: Record<string, unknown> = {
       model: request.model,
       instructions: buildProviderSystemPrompt(request),
@@ -66,9 +71,25 @@ export class OpenAIChatAdapter implements ChatAdapter {
     }
     if (request.enableVaultOperations) {
       const schema = createVaultOperationToolSchema();
-      body.tools = [toOpenAIFunctionTool(schema)];
+      operationTool = toOpenAIFunctionTool(schema);
+      body.tools = [operationTool];
       body.tool_choice = { type: "function", name: schema.name };
       body.parallel_tool_calls = false;
+    }
+    request.diagnostics?.log("openai.request", {
+      requestId: request.diagnosticRequestId,
+      model: request.model,
+      enableVaultOperations: request.enableVaultOperations === true,
+      maxOutputTokens: request.maxOutputTokens,
+      messageCount: request.messages.length,
+      contextFileCount: request.context.files.length,
+      operationTargetCount: request.operationTargets.sources.length,
+      imageAttachmentCount: request.imageAttachments?.length ?? 0,
+      toolAttached: request.enableVaultOperations === true,
+      toolChoice: request.enableVaultOperations ? "propose_vault_operations" : null
+    });
+    if (operationTool) {
+      logOpenAIToolSchema(request, operationTool);
     }
 
     const response = await this.fetchImpl("https://api.openai.com/v1/responses", {
@@ -80,6 +101,12 @@ export class OpenAIChatAdapter implements ChatAdapter {
       body: JSON.stringify(body),
       signal
     });
+    request.diagnostics?.log("openai.response", {
+      requestId: request.diagnosticRequestId,
+      status: response.status,
+      ok: response.ok,
+      hasBody: Boolean(response.body)
+    });
 
     if (!response.ok) {
       yield { type: "error", message: await formatProviderHttpError("OpenAI", response) };
@@ -87,6 +114,9 @@ export class OpenAIChatAdapter implements ChatAdapter {
     }
 
     if (!response.body) {
+      request.diagnostics?.log("openai.stream_missing_body", {
+        requestId: request.diagnosticRequestId
+      });
       yield { type: "error", message: "OpenAI response stream could not be read." };
       return;
     }
@@ -175,6 +205,38 @@ async function* parseOpenAIStream(
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let sawTextOutput = false;
+  let sawVaultOperationResult = false;
+
+  const mapAndTrackEvent = async (event: OpenAIStreamEvent): Promise<ChatEvent | null> => {
+    logOpenAIStreamEvent(request, event);
+    if (event.type === "response.output_text.delta" && typeof event.delta === "string" && event.delta) {
+      sawTextOutput = true;
+    }
+    if (
+      event.type === "response.function_call_arguments.done" &&
+      (event.name ?? event.item?.name) === "propose_vault_operations"
+    ) {
+      sawVaultOperationResult = true;
+    }
+
+    const mapped = await mapOpenAIEvent(event, request, fetchImpl, signal);
+    if (
+      mapped?.type === "done" &&
+      request.enableVaultOperations &&
+      !sawTextOutput &&
+      !sawVaultOperationResult
+    ) {
+      request.diagnostics?.log("openai.operation_missing", {
+        requestId: request.diagnosticRequestId,
+        sawTextOutput,
+        sawVaultOperationResult
+      });
+      return { type: "error", message: INCOMPLETE_OPENAI_OPERATION_MESSAGE };
+    }
+
+    return mapped;
+  };
 
   try {
     while (true) {
@@ -193,7 +255,7 @@ async function* parseOpenAIStream(
           continue;
         }
 
-        const mapped = await mapOpenAIEvent(event, request, fetchImpl, signal);
+        const mapped = await mapAndTrackEvent(event);
         if (mapped) {
           yield mapped;
         }
@@ -202,7 +264,7 @@ async function* parseOpenAIStream(
 
     buffer += decoder.decode();
     const event = parseSsePart(buffer);
-    const mapped = event ? await mapOpenAIEvent(event, request, fetchImpl, signal) : null;
+    const mapped = event ? await mapAndTrackEvent(event) : null;
     if (mapped) {
       yield mapped;
     }
@@ -286,7 +348,16 @@ async function mapVaultOperationArguments(
   signal: AbortSignal,
   repairAttempted: boolean
 ): Promise<ChatEvent> {
+  request.diagnostics?.log("openai.function_arguments_done", {
+    requestId: request.diagnosticRequestId,
+    argumentsLength: argumentsJson?.length ?? 0,
+    repairAttempted
+  });
   if (!argumentsJson) {
+    request.diagnostics?.log("openai.function_arguments_missing", {
+      requestId: request.diagnosticRequestId,
+      repairAttempted
+    });
     return { type: "error", message: INVALID_ORCHESTRATOR_OPERATION_MESSAGE };
   }
 
@@ -298,9 +369,20 @@ async function mapVaultOperationArguments(
       operationTargets: request.operationTargets
     });
     if (result.ok) {
+      request.diagnostics?.log("openai.proposal_validated", {
+        requestId: request.diagnosticRequestId,
+        repairAttempted,
+        ...summarizeProposal(result.proposal)
+      });
       return { type: "proposal", proposal: result.proposal };
     }
 
+    request.diagnostics?.log("openai.proposal_invalid", {
+      requestId: request.diagnosticRequestId,
+      repairAttempted,
+      errorCount: result.errors.length,
+      errors: result.errors.slice(0, 3)
+    });
     if (!repairAttempted) {
       const repaired = await repairOpenAIOrchestratorOperation(request, fetchImpl, signal, result.repairPrompt);
       const repairedResult = handleOrchestratorOperationPayload(repaired, {
@@ -309,12 +391,31 @@ async function mapVaultOperationArguments(
         operationTargets: request.operationTargets
       });
       if (repairedResult.ok) {
+        request.diagnostics?.log("openai.proposal_repaired", {
+          requestId: request.diagnosticRequestId,
+          ...summarizeProposal(repairedResult.proposal)
+        });
         return { type: "proposal", proposal: repairedResult.proposal };
       }
+      request.diagnostics?.log("openai.proposal_repair_failed", {
+        requestId: request.diagnosticRequestId,
+        errorCount: repairedResult.errors.length,
+        errors: repairedResult.errors.slice(0, 3)
+      });
     }
 
+    request.diagnostics?.log("openai.proposal_failed", {
+      requestId: request.diagnosticRequestId,
+      errorCount: result.errors.length,
+      errors: result.errors.slice(0, 3)
+    });
     return { type: "error", message: formatInvalidOrchestratorOperationMessage(result.errors) };
   } catch {
+    request.diagnostics?.log("openai.function_arguments_parse_failed", {
+      requestId: request.diagnosticRequestId,
+      argumentsLength: argumentsJson.length,
+      repairAttempted
+    });
     return { type: "error", message: INVALID_ORCHESTRATOR_OPERATION_MESSAGE };
   }
 }
@@ -397,14 +498,115 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function logOpenAIToolSchema(request: ChatRequest, tool: Record<string, unknown>): void {
+  const parameters = isRecord(tool.parameters) ? tool.parameters : {};
+  const properties = isRecord(parameters.properties) ? parameters.properties : {};
+  const operations = isRecord(properties.operations) ? properties.operations : {};
+  const operationItems = isRecord(operations.items) ? operations.items : {};
+  const operationProperties = isRecord(operationItems.properties) ? operationItems.properties : {};
+  const operationRequired = getStringArray(operationItems.required);
+
+  request.diagnostics?.log("openai.tool_schema", {
+    requestId: request.diagnosticRequestId,
+    strict: tool.strict === true,
+    topRequired: getStringArray(parameters.required),
+    operationPropertyCount: Object.keys(operationProperties).length,
+    operationRequiredCount: operationRequired.length,
+    operationRequiredIncludesId: operationRequired.includes("id")
+  });
+}
+
+function logOpenAIStreamEvent(request: ChatRequest, event: OpenAIStreamEvent): void {
+  const argumentsText = event.arguments ?? event.item?.arguments;
+  request.diagnostics?.log("openai.stream_event", {
+    requestId: request.diagnosticRequestId,
+    type: event.type,
+    deltaLength: typeof event.delta === "string" ? event.delta.length : undefined,
+    functionName: event.name ?? event.item?.name,
+    argumentsLength: typeof argumentsText === "string" ? argumentsText.length : undefined,
+    usage: mapUsage(event.response?.usage)
+  });
+}
+
+function summarizeProposal(proposal: VaultOperationProposal): Record<string, unknown> {
+  return {
+    operationCount: proposal.operations.length,
+    operationTypes: proposal.operations.map((operation) => operation.type),
+    operationPaths: proposal.operations.map((operation) => operation.path)
+  };
+}
+
 function toOpenAIFunctionTool(schema: VaultOperationToolSchema): Record<string, unknown> {
   return {
     type: "function",
     name: schema.name,
     description: schema.description,
-    parameters: schema.input_schema,
+    parameters: toOpenAIStrictSchema(schema.input_schema),
     strict: true
   };
+}
+
+function toOpenAIStrictSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) {
+    return schema.map((item) => toOpenAIStrictSchema(item));
+  }
+
+  if (!isRecord(schema)) {
+    return schema;
+  }
+
+  const output: Record<string, unknown> = {};
+  const requiredKeys = new Set(getStringArray(schema.required));
+
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === "required" || key === "properties" || key === "items") {
+      continue;
+    }
+    if (key === "minItems") {
+      continue;
+    }
+    output[key] = toOpenAIStrictSchema(value);
+  }
+
+  if (isRecord(schema.properties)) {
+    const properties: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(schema.properties)) {
+      const propertySchema = toOpenAIStrictSchema(value);
+      properties[key] = requiredKeys.has(key) ? propertySchema : makeNullableSchema(propertySchema);
+    }
+    output.properties = properties;
+    output.required = Object.keys(properties);
+    output.additionalProperties = false;
+  }
+
+  if (schema.items !== undefined) {
+    output.items = toOpenAIStrictSchema(schema.items);
+  }
+
+  return output;
+}
+
+function makeNullableSchema(schema: unknown): unknown {
+  if (!isRecord(schema)) {
+    return schema;
+  }
+
+  const output: Record<string, unknown> = { ...schema };
+  if (typeof output.type === "string") {
+    output.type = output.type === "null" ? output.type : [output.type, "null"];
+  } else if (Array.isArray(output.type)) {
+    output.type = output.type.includes("null") ? output.type : [...output.type, "null"];
+  }
+
+  if (Array.isArray(output.enum) && !output.enum.includes(null)) {
+    output.enum = [...output.enum, null];
+  }
+
+  return output;
+}
+
+function getStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
 function mapUsage(usage: OpenAIUsage | undefined): ChatUsage | undefined {

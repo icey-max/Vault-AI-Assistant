@@ -5,6 +5,7 @@ import {
 } from "./assistant-view";
 import { ChatStore } from "./chat-store";
 import { VaultContextManager } from "./context";
+import { VaultDiagnosticLogger } from "./diagnostics";
 import {
   DEFAULT_SETTINGS,
   normalizeSettings,
@@ -19,10 +20,15 @@ export default class VaultAIAssistantPlugin extends Plugin {
   contextManager: VaultContextManager;
   chatStore: ChatStore;
   operationExecutor: VaultOperationExecutor;
+  diagnostics: VaultDiagnosticLogger;
 
   async onload(): Promise<void> {
     await this.loadSettings();
     await this.ensureEditableSystemPrompts();
+    this.diagnostics = new VaultDiagnosticLogger(
+      this.app.vault,
+      () => this.settings.diagnosticLoggingEnabled
+    );
     this.contextManager = new VaultContextManager(this.app, () => this.refreshAssistantViews());
     this.chatStore = new ChatStore(
       this.app.vault,

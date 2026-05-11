@@ -5,6 +5,7 @@ import type {
   OperationTargetSnapshot,
   OperationTargetType
 } from "./context-utils";
+import type { DiagnosticLogger } from "./diagnostics";
 import type { ProviderId } from "./settings";
 import type { VaultOperationProposal } from "./vault-operations";
 
@@ -94,6 +95,8 @@ export interface ChatRequest {
   enableVaultOperations?: boolean;
   maxOutputTokens?: number;
   imageAttachments?: ChatRequestImageAttachment[];
+  diagnostics?: DiagnosticLogger;
+  diagnosticRequestId?: string;
 }
 
 export type ChatEvent =

@@ -84,6 +84,14 @@ test("shouldEnableVaultOperations handles scoped confirmations and edit intents"
   );
   assert.equal(shouldEnableVaultOperations("set this up in my vault", 0, 1), true);
   assert.equal(shouldEnableVaultOperations("populate these chapter notes", 0, 1), true);
+  assert.equal(
+    shouldEnableVaultOperations(
+      "Can you provide me with a reading system / structure in this folder path?",
+      1,
+      1
+    ),
+    true
+  );
 });
 
 test("shouldEnableVaultOperationsForRequest keeps operation tools on for scoped confirmations and retries", () => {
@@ -133,12 +141,45 @@ test("shouldEnableVaultOperationsForRequest keeps operation tools on for scoped 
   );
   assert.equal(
     shouldEnableVaultOperationsForRequest({
+      message: "Maybe have another go?",
+      previousMessages,
+      contextFileCount: 3,
+      targetCount: 1
+    }),
+    true
+  );
+  assert.equal(
+    shouldEnableVaultOperationsForRequest({
       message: "what is here?",
       previousMessages,
       contextFileCount: 3,
       targetCount: 1
     }),
     false
+  );
+});
+
+test("shouldEnableVaultOperationsForRequest keeps tools on after assistant setup proposal preamble", () => {
+  const previousMessages = [
+    {
+      role: "user" as const,
+      content: "Maybe have another go?"
+    },
+    {
+      role: "assistant" as const,
+      content:
+        "Proposed structure\n\nHomepage.md - dashboard and links\nReading Log.md - track sessions\n\nIf you want, I can propose the actual file contents now."
+    }
+  ];
+
+  assert.equal(
+    shouldEnableVaultOperationsForRequest({
+      message: "Yes, do it",
+      previousMessages,
+      contextFileCount: 1,
+      targetCount: 1
+    }),
+    true
   );
 });
 

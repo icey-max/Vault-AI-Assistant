@@ -25,6 +25,7 @@ export interface VaultAIAssistantSettings {
   autoAttachActiveFileContext: boolean;
   chatHistoryRetentionDays: ChatHistoryRetentionDays;
   maxOutputTokens: number;
+  diagnosticLoggingEnabled: boolean;
 }
 
 export type AssistantViewLocation = "sidebar" | "editor";
@@ -52,7 +53,8 @@ export const DEFAULT_SETTINGS: VaultAIAssistantSettings = {
   assistantViewLocation: "sidebar",
   autoAttachActiveFileContext: false,
   chatHistoryRetentionDays: null,
-  maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS
+  maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+  diagnosticLoggingEnabled: false
 };
 
 export function hasConfiguredProvider(settings: VaultAIAssistantSettings): boolean {
@@ -150,6 +152,7 @@ export function normalizeSettings(settings: VaultAIAssistantSettings): VaultAIAs
     normalized.chatHistoryRetentionDays
   );
   normalized.maxOutputTokens = normalizeOutputTokenLimit(normalized.maxOutputTokens);
+  normalized.diagnosticLoggingEnabled = normalized.diagnosticLoggingEnabled === true;
 
   return normalized;
 }
@@ -220,6 +223,7 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
     this.addInterfaceSection();
     this.addContextSection();
     this.addChatHistorySection();
+    this.addDiagnosticsSection();
   }
 
   private addInterfaceSection(): void {
@@ -436,6 +440,24 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
             );
             await this.plugin.saveSettings();
             await this.plugin.pruneSavedChatHistory();
+          });
+      });
+  }
+
+  private addDiagnosticsSection(): void {
+    new Setting(this.containerEl).setName("Diagnostics").setHeading();
+
+    new Setting(this.containerEl)
+      .setName("Provider diagnostics")
+      .setDesc(
+        "Write provider request and stream metadata to vault-ai-assistant/diagnostics. Logs include model, tool decisions, event types, token counts, and note paths, but not API keys or note contents."
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.diagnosticLoggingEnabled)
+          .onChange(async (value) => {
+            this.plugin.settings.diagnosticLoggingEnabled = value;
+            await this.plugin.saveSettings();
           });
       });
   }

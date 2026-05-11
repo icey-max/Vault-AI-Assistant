@@ -33,6 +33,7 @@ import {
   persistImageAttachment,
   readPersistedImageAttachmentData
 } from "./image-attachments";
+import { createDiagnosticRequestId } from "./diagnostics";
 import type VaultAIAssistantPlugin from "./main";
 import {
   createContextSnapshot,
@@ -1445,6 +1446,27 @@ export class VaultAIAssistantView extends ItemView {
       providerConfig.provider === "openai"
         ? new OpenAIChatAdapter(obsidianRequestFetch)
         : new AnthropicChatAdapter(obsidianRequestFetch);
+    const enableVaultOperations = shouldEnableVaultOperationsForRequest({
+      message: requestUserMessage,
+      previousMessages,
+      contextFileCount: context.files.length,
+      targetCount: operationTargets.sources.length
+    });
+    const diagnosticRequestId = createDiagnosticRequestId();
+    this.plugin.diagnostics.log("chat.request_prepared", {
+      requestId: diagnosticRequestId,
+      provider: providerConfig.provider,
+      model: providerConfig.model,
+      enableVaultOperations,
+      maxOutputTokens: this.plugin.settings.maxOutputTokens,
+      userMessageLength: requestUserMessage.length,
+      previousMessageCount: previousMessages.length,
+      contextFileCount: context.files.length,
+      contextPaths: context.files.map((file) => file.path),
+      operationTargetCount: operationTargets.sources.length,
+      operationTargetPaths: operationTargets.sources.map((source) => source.path),
+      imageAttachmentCount: imageAttachments.length
+    });
 
     try {
       for await (const event of adapter.stream(
@@ -1459,14 +1481,11 @@ export class VaultAIAssistantView extends ItemView {
           operationTargets,
           operationTargetSnapshot,
           systemPrompt,
-          enableVaultOperations: shouldEnableVaultOperationsForRequest({
-            message: requestUserMessage,
-            previousMessages,
-            contextFileCount: context.files.length,
-            targetCount: operationTargets.sources.length
-          }),
+          enableVaultOperations,
           maxOutputTokens: this.plugin.settings.maxOutputTokens,
-          imageAttachments
+          imageAttachments,
+          diagnostics: this.plugin.diagnostics,
+          diagnosticRequestId
         },
         abortController.signal
       )) {
