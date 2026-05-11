@@ -449,9 +449,7 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
 
     new Setting(this.containerEl)
       .setName("Provider diagnostics")
-      .setDesc(
-        "Write provider request and stream metadata to vault-ai-assistant/diagnostics. Logs include model, tool decisions, event types, token counts, and note paths, but not API keys or note contents."
-      )
+      .setDesc("Write diagnostic metadata for provider requests and streams.")
       .addToggle((toggle) => {
         toggle
           .setValue(this.plugin.settings.diagnosticLoggingEnabled)

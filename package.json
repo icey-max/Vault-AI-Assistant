@@ -1,6 +1,6 @@
 {
   "name": "vault-ai-assistant",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "AI assistant for explicitly attached vault context with approval-gated vault actions.",
   "main": "main.js",
   "type": "module",
