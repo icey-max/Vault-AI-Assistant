@@ -615,6 +615,55 @@ test("OpenAIChatAdapter surfaces blank operation completions as recovery errors"
   assert.ok(logs.some((entry) => entry.event === "openai.tool_schema"));
 });
 
+test("OpenAIChatAdapter accepts unnamed function argument completion for forced operation tools", async () => {
+  const proposalArguments = JSON.stringify({
+    summary: "Prepare notes",
+    operations: [
+      {
+        type: "create_note",
+        path: "Notes/New.md",
+        description: "Create a new note",
+        content: "# New"
+      }
+    ]
+  });
+  const adapter = new OpenAIChatAdapter(async () =>
+    new Response(
+      streamText([
+        sse({ type: "response.created", response: { id: "resp_1" } }),
+        sse({
+          type: "response.function_call_arguments.done",
+          arguments: proposalArguments
+        }),
+        sse({
+          type: "response.output_item.done",
+          item: {
+            type: "function_call",
+            name: "propose_vault_operations",
+            arguments: proposalArguments
+          }
+        }),
+        sse({ type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } })
+      ]),
+      { status: 200 }
+    )
+  );
+
+  const events = await collectEvents(
+    adapter.stream(createVaultOperationRequest(), new AbortController().signal)
+  );
+  const proposalEvents = events.filter(
+    (event): event is Extract<ChatEvent, { type: "proposal" }> => event.type === "proposal"
+  );
+
+  assert.deepEqual(
+    events.map((event) => event.type),
+    ["start", "proposal", "done"]
+  );
+  assert.equal(proposalEvents.length, 1);
+  assert.equal(proposalEvents[0]?.proposal.operations[0]?.path, "Notes/New.md");
+});
+
 test("OpenAIChatAdapter emits redacted diagnostics for operation streams", async () => {
   const logs: DiagnosticLogEntry[] = [];
   const proposalArguments = JSON.stringify({

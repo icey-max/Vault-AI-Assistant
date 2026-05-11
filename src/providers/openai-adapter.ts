@@ -215,7 +215,7 @@ async function* parseOpenAIStream(
     }
     if (
       event.type === "response.function_call_arguments.done" &&
-      (event.name ?? event.item?.name) === "propose_vault_operations"
+      isVaultOperationFunctionCall(event, request)
     ) {
       sawVaultOperationResult = true;
     }
@@ -316,13 +316,12 @@ async function mapOpenAIEvent(
   }
 
   if (event.type === "response.function_call_arguments.done") {
-    const name = event.name ?? event.item?.name;
-    if (name !== "propose_vault_operations") {
+    if (!isVaultOperationFunctionCall(event, request)) {
       return null;
     }
 
     return mapVaultOperationArguments(
-      event.arguments ?? event.item?.arguments,
+      getOpenAIFunctionArguments(event),
       request,
       fetchImpl,
       signal,
@@ -517,15 +516,39 @@ function logOpenAIToolSchema(request: ChatRequest, tool: Record<string, unknown>
 }
 
 function logOpenAIStreamEvent(request: ChatRequest, event: OpenAIStreamEvent): void {
-  const argumentsText = event.arguments ?? event.item?.arguments;
+  const argumentsText = getOpenAIFunctionArguments(event);
   request.diagnostics?.log("openai.stream_event", {
     requestId: request.diagnosticRequestId,
     type: event.type,
     deltaLength: typeof event.delta === "string" ? event.delta.length : undefined,
-    functionName: event.name ?? event.item?.name,
+    functionName: getOpenAIFunctionName(event),
     argumentsLength: typeof argumentsText === "string" ? argumentsText.length : undefined,
     usage: mapUsage(event.response?.usage)
   });
+}
+
+function isVaultOperationFunctionCall(event: OpenAIStreamEvent, request: ChatRequest): boolean {
+  const name = getOpenAIFunctionName(event);
+  if (name === "propose_vault_operations") {
+    return true;
+  }
+
+  // The Responses stream can omit the name on function_call_arguments.done.
+  // We force tool_choice and disable parallel tool calls for vault operations,
+  // so an unnamed completed argument payload belongs to the requested tool.
+  return (
+    request.enableVaultOperations === true &&
+    !name &&
+    typeof getOpenAIFunctionArguments(event) === "string"
+  );
+}
+
+function getOpenAIFunctionName(event: OpenAIStreamEvent): string | undefined {
+  return event.name ?? event.item?.name;
+}
+
+function getOpenAIFunctionArguments(event: OpenAIStreamEvent): string | undefined {
+  return event.arguments ?? event.item?.arguments;
 }
 
 function summarizeProposal(proposal: VaultOperationProposal): Record<string, unknown> {
