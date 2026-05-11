@@ -1,4 +1,5 @@
 import type { ChatAdapter, ChatEvent, ChatRequest, ChatUsage } from "../chat-types";
+import { summarizeDiagnosticList } from "../diagnostics";
 import {
   createVaultOperationToolSchema,
   formatInvalidOrchestratorOperationMessage,
@@ -37,6 +38,17 @@ interface OpenAIStreamEvent {
 }
 
 type OpenAIUsage = NonNullable<OpenAIStreamEvent["response"]>["usage"];
+
+interface OpenAIStreamDiagnosticsSummary {
+  totalEvents: number;
+  eventCounts: Record<string, number>;
+  outputTextDeltaCount: number;
+  outputTextDeltaBytes: number;
+  functionArgumentDeltaCount: number;
+  functionArgumentDeltaBytes: number;
+  functionArgumentSnapshotBytesMax: number;
+  errorEventCount: number;
+}
 
 interface OpenAIInputMessage {
   role: "user" | "assistant";
@@ -207,9 +219,10 @@ async function* parseOpenAIStream(
   let buffer = "";
   let sawTextOutput = false;
   let sawVaultOperationResult = false;
+  const streamDiagnostics = createOpenAIStreamDiagnosticsSummary();
 
   const mapAndTrackEvent = async (event: OpenAIStreamEvent): Promise<ChatEvent | null> => {
-    logOpenAIStreamEvent(request, event);
+    trackOpenAIStreamEvent(streamDiagnostics, event);
     if (event.type === "response.output_text.delta" && typeof event.delta === "string" && event.delta) {
       sawTextOutput = true;
     }
@@ -269,6 +282,10 @@ async function* parseOpenAIStream(
       yield mapped;
     }
   } finally {
+    request.diagnostics?.log("openai.stream_summary", {
+      requestId: request.diagnosticRequestId,
+      ...streamDiagnostics
+    });
     reader.releaseLock();
   }
 }
@@ -515,16 +532,45 @@ function logOpenAIToolSchema(request: ChatRequest, tool: Record<string, unknown>
   });
 }
 
-function logOpenAIStreamEvent(request: ChatRequest, event: OpenAIStreamEvent): void {
+function createOpenAIStreamDiagnosticsSummary(): OpenAIStreamDiagnosticsSummary {
+  return {
+    totalEvents: 0,
+    eventCounts: {},
+    outputTextDeltaCount: 0,
+    outputTextDeltaBytes: 0,
+    functionArgumentDeltaCount: 0,
+    functionArgumentDeltaBytes: 0,
+    functionArgumentSnapshotBytesMax: 0,
+    errorEventCount: 0
+  };
+}
+
+function trackOpenAIStreamEvent(
+  summary: OpenAIStreamDiagnosticsSummary,
+  event: OpenAIStreamEvent
+): void {
+  const type = event.type ?? "unknown";
+  summary.totalEvents += 1;
+  summary.eventCounts[type] = (summary.eventCounts[type] ?? 0) + 1;
+
+  if (type === "response.output_text.delta" && typeof event.delta === "string") {
+    summary.outputTextDeltaCount += 1;
+    summary.outputTextDeltaBytes += event.delta.length;
+  }
+  if (type === "response.function_call_arguments.delta" && typeof event.delta === "string") {
+    summary.functionArgumentDeltaCount += 1;
+    summary.functionArgumentDeltaBytes += event.delta.length;
+  }
   const argumentsText = getOpenAIFunctionArguments(event);
-  request.diagnostics?.log("openai.stream_event", {
-    requestId: request.diagnosticRequestId,
-    type: event.type,
-    deltaLength: typeof event.delta === "string" ? event.delta.length : undefined,
-    functionName: getOpenAIFunctionName(event),
-    argumentsLength: typeof argumentsText === "string" ? argumentsText.length : undefined,
-    usage: mapUsage(event.response?.usage)
-  });
+  if (typeof argumentsText === "string") {
+    summary.functionArgumentSnapshotBytesMax = Math.max(
+      summary.functionArgumentSnapshotBytesMax,
+      argumentsText.length
+    );
+  }
+  if (type === "error") {
+    summary.errorEventCount += 1;
+  }
 }
 
 function isVaultOperationFunctionCall(event: OpenAIStreamEvent, request: ChatRequest): boolean {
@@ -554,9 +600,17 @@ function getOpenAIFunctionArguments(event: OpenAIStreamEvent): string | undefine
 function summarizeProposal(proposal: VaultOperationProposal): Record<string, unknown> {
   return {
     operationCount: proposal.operations.length,
-    operationTypes: proposal.operations.map((operation) => operation.type),
-    operationPaths: proposal.operations.map((operation) => operation.path)
+    operationTypeCounts: countOperationTypes(proposal.operations),
+    operationPaths: summarizeDiagnosticList(proposal.operations.map((operation) => operation.path))
   };
+}
+
+function countOperationTypes(operations: VaultOperationProposal["operations"]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const operation of operations) {
+    counts[operation.type] = (counts[operation.type] ?? 0) + 1;
+  }
+  return counts;
 }
 
 function toOpenAIFunctionTool(schema: VaultOperationToolSchema): Record<string, unknown> {

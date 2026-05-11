@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { ContextPackage } from "../src/context-utils";
 import { ChatEvent, ChatRequest } from "../src/chat-types";
-import { sanitizeDiagnosticValue } from "../src/diagnostics";
+import {
+  getDiagnosticLogPath,
+  sanitizeDiagnosticValue,
+  summarizeDiagnosticList
+} from "../src/diagnostics";
 import { AnthropicChatAdapter } from "../src/providers/anthropic-adapter";
 import { OpenAIChatAdapter } from "../src/providers/openai-adapter";
 import { VAULT_EDITOR_SYSTEM_PROMPT } from "../src/system-prompts";
@@ -706,19 +710,89 @@ test("OpenAIChatAdapter emits redacted diagnostics for operation streams", async
   const proposal = events.find((event): event is Extract<ChatEvent, { type: "proposal" }> => event.type === "proposal");
   const eventNames = new Set(logs.map((entry) => entry.event));
   const toolSchema = logs.find((entry) => entry.event === "openai.tool_schema");
+  const streamLog = logs.find((entry) => entry.event === "openai.stream_summary");
   const proposalLog = logs.find((entry) => entry.event === "openai.proposal_validated");
   const serializedLogs = JSON.stringify(logs);
 
   assert.ok(proposal);
   assert.ok(eventNames.has("openai.request"));
   assert.ok(eventNames.has("openai.response"));
-  assert.ok(eventNames.has("openai.stream_event"));
+  assert.ok(eventNames.has("openai.stream_summary"));
+  assert.equal(eventNames.has("openai.stream_event"), false);
   assert.ok(eventNames.has("openai.function_arguments_done"));
   assert.equal(toolSchema?.details?.operationRequiredIncludesId, true);
-  assert.deepEqual(proposalLog?.details?.operationTypes, ["create_note"]);
-  assert.deepEqual(proposalLog?.details?.operationPaths, ["Notes/New.md"]);
+  assert.equal(streamLog?.details?.totalEvents, 3);
+  assert.deepEqual(streamLog?.details?.eventCounts, {
+    "response.created": 1,
+    "response.function_call_arguments.done": 1,
+    "response.completed": 1
+  });
+  assert.deepEqual(proposalLog?.details?.operationTypeCounts, { create_note: 1 });
+  assert.deepEqual(proposalLog?.details?.operationPaths, {
+    total: 1,
+    sample: ["Notes/New.md"],
+    omitted: 0
+  });
   assert.doesNotMatch(serializedLogs, /sk-proj-testsecret123456789/);
   assert.doesNotMatch(serializedLogs, /Very private note text/);
+});
+
+test("OpenAIChatAdapter summarizes high-volume function argument stream diagnostics", async () => {
+  const logs: DiagnosticLogEntry[] = [];
+  const proposalArguments = JSON.stringify({
+    summary: "Prepare notes",
+    operations: [
+      {
+        type: "create_note",
+        path: "Notes/New.md",
+        description: "Create a new note",
+        content: "# Very private note text"
+      }
+    ]
+  });
+  const deltaChunks = Array.from({ length: 50 }, (_, index) => `chunk-${index}`);
+  const adapter = new OpenAIChatAdapter(async () =>
+    new Response(
+      streamText([
+        sse({ type: "response.created", response: { id: "resp_1" } }),
+        ...deltaChunks.map((delta) =>
+          sse({
+            type: "response.function_call_arguments.delta",
+            name: "propose_vault_operations",
+            delta
+          })
+        ),
+        sse({
+          type: "response.function_call_arguments.done",
+          name: "propose_vault_operations",
+          arguments: proposalArguments
+        }),
+        sse({ type: "response.completed", response: { usage: { input_tokens: 1, output_tokens: 1 } } })
+      ]),
+      { status: 200 }
+    )
+  );
+
+  await collectEvents(
+    adapter.stream(
+      {
+        ...createVaultOperationRequest(),
+        diagnostics: createDiagnostics(logs),
+        diagnosticRequestId: "diag-noisy"
+      },
+      new AbortController().signal
+    )
+  );
+  const streamLog = logs.find((entry) => entry.event === "openai.stream_summary");
+
+  assert.equal(logs.some((entry) => entry.event === "openai.stream_event"), false);
+  assert.equal(streamLog?.details?.totalEvents, 53);
+  assert.equal(streamLog?.details?.functionArgumentDeltaCount, 50);
+  assert.equal(
+    streamLog?.details?.functionArgumentDeltaBytes,
+    deltaChunks.join("").length
+  );
+  assert.equal(streamLog?.details?.functionArgumentSnapshotBytesMax, proposalArguments.length);
 });
 
 test("diagnostic sanitizer keeps paths and counts while redacting secrets and content", () => {
@@ -728,6 +802,7 @@ test("diagnostic sanitizer keeps paths and counts while redacting secrets and co
       contextPaths: ["Notes/Alpha.md"],
       operationTargetPaths: ["Books"],
       apiKey: "sk-proj-testsecret123456789",
+      arguments: "{\"content\":\"Hidden note body\"}",
       content: "# Hidden note body",
       text: "Hidden prompt text"
     }),
@@ -736,9 +811,44 @@ test("diagnostic sanitizer keeps paths and counts while redacting secrets and co
       contextPaths: ["Notes/Alpha.md"],
       operationTargetPaths: ["Books"],
       apiKey: "[redacted]",
+      arguments: "[redacted]",
       content: "[redacted]",
       text: "[redacted]"
     }
+  );
+});
+
+test("diagnostic helpers summarize large lists", () => {
+  const values = Array.from({ length: 30 }, (_, index) => `Notes/${index}.md`);
+
+  assert.deepEqual(summarizeDiagnosticList(values, 3), {
+    total: 30,
+    sample: ["Notes/0.md", "Notes/1.md", "Notes/2.md"],
+    omitted: 27
+  });
+  assert.deepEqual(sanitizeDiagnosticValue({ paths: values }), {
+    paths: {
+      total: 30,
+      sample: values.slice(0, 25),
+      omitted: 5
+    }
+  });
+});
+
+test("diagnostic log path creates one file per request", () => {
+  const date = new Date("2026-05-11T16:44:31.000Z");
+
+  assert.equal(
+    getDiagnosticLogPath({ requestId: "diag-mp1fmccn-mqkqwi" }, date),
+    "vault-ai-assistant/diagnostics/2026-05-11/diag-mp1fmccn-mqkqwi.jsonl"
+  );
+  assert.equal(
+    getDiagnosticLogPath({ requestId: "bad/path : id" }, date),
+    "vault-ai-assistant/diagnostics/2026-05-11/bad-path-id.jsonl"
+  );
+  assert.equal(
+    getDiagnosticLogPath({}, date),
+    "vault-ai-assistant/diagnostics/2026-05-11/general.jsonl"
   );
 });
 

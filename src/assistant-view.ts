@@ -33,7 +33,7 @@ import {
   persistImageAttachment,
   readPersistedImageAttachmentData
 } from "./image-attachments";
-import { createDiagnosticRequestId } from "./diagnostics";
+import { createDiagnosticRequestId, summarizeDiagnosticList } from "./diagnostics";
 import type VaultAIAssistantPlugin from "./main";
 import {
   createContextSnapshot,
@@ -334,6 +334,9 @@ export class VaultAIAssistantView extends ItemView {
     });
 
     this.renderMessageContent(row, message);
+    if (this.shouldShowAssistantThinkingIndicator(message)) {
+      this.renderAssistantThinkingIndicator(row);
+    }
 
     if (message.role === "user") {
       this.renderMessageAttachments(row, message);
@@ -386,9 +389,9 @@ export class VaultAIAssistantView extends ItemView {
 
   private renderMessageContent(container: HTMLElement, message: ChatMessage): void {
     const content = container.createDiv({ cls: "vault-ai-assistant-message-content" });
-    const text = message.content || (message.status === "streaming" ? "Thinking..." : "");
+    const text = message.content;
 
-    if (message.role !== "assistant" || !message.content) {
+    if (message.role !== "assistant" || !message.content.trim()) {
       content.setText(text);
       return;
     }
@@ -404,6 +407,39 @@ export class VaultAIAssistantView extends ItemView {
     ).catch(() => {
       content.empty();
       content.setText(message.content);
+    });
+  }
+
+  private shouldShowAssistantThinkingIndicator(message: ChatMessage): boolean {
+    return (
+      message.role === "assistant" &&
+      message.status === "streaming" &&
+      !message.content.trim() &&
+      !message.error &&
+      (message.proposals?.length ?? 0) === 0
+    );
+  }
+
+  private renderAssistantThinkingIndicator(container: HTMLElement): void {
+    const indicator = container.createDiv({
+      cls: "vault-ai-assistant-thinking",
+      attr: {
+        role: "status",
+        "aria-live": "polite",
+        "aria-label": "Assistant is thinking"
+      }
+    });
+    const dots = indicator.createSpan({
+      cls: "vault-ai-assistant-thinking-dots",
+      attr: { "aria-hidden": "true" }
+    });
+    for (let index = 0; index < 3; index += 1) {
+      dots.createSpan({ cls: "vault-ai-assistant-thinking-dot" });
+    }
+    indicator.createSpan({
+      cls: "vault-ai-assistant-thinking-label",
+      attr: { "aria-hidden": "true" },
+      text: "Thinking"
     });
   }
 
@@ -480,11 +516,33 @@ export class VaultAIAssistantView extends ItemView {
   }
 
   private renderAssistantMessageActions(container: HTMLElement, message: ChatMessage): void {
-    if (!message.content.trim()) {
+    const isActiveStreamingMessage =
+      message.status === "streaming" &&
+      this.activeAssistantMessageId === message.id &&
+      this.activeAbortController !== null;
+    if (!message.content.trim() && !isActiveStreamingMessage) {
       return;
     }
 
     const actions = container.createDiv({ cls: "vault-ai-assistant-message-actions" });
+    if (isActiveStreamingMessage) {
+      const stop = actions.createEl("button", {
+        cls: "vault-ai-assistant-icon-action vault-ai-assistant-message-stop"
+      });
+      stop.type = "button";
+      setIcon(stop, "square");
+      setIconActionLabel(stop, "Stop response");
+      stop.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void this.stopResponse();
+      });
+    }
+
+    if (!message.content.trim()) {
+      return;
+    }
+
     const copy = actions.createEl("button", {
       cls: "vault-ai-assistant-icon-action vault-ai-assistant-message-copy"
     });
@@ -912,7 +970,7 @@ export class VaultAIAssistantView extends ItemView {
     root.render(
       createElement(Composer, {
         value: this.composerValue,
-        disabled: isStreaming,
+        disabled: false,
         isStreaming,
         canSubmitMessage: (value) => this.canSendMessage(value),
         helperMessage: this.composerHelperMessage,
@@ -1462,9 +1520,9 @@ export class VaultAIAssistantView extends ItemView {
       userMessageLength: requestUserMessage.length,
       previousMessageCount: previousMessages.length,
       contextFileCount: context.files.length,
-      contextPaths: context.files.map((file) => file.path),
+      contextPaths: summarizeDiagnosticList(context.files.map((file) => file.path)),
       operationTargetCount: operationTargets.sources.length,
-      operationTargetPaths: operationTargets.sources.map((source) => source.path),
+      operationTargetPaths: summarizeDiagnosticList(operationTargets.sources.map((source) => source.path)),
       imageAttachmentCount: imageAttachments.length
     });
 
@@ -1533,8 +1591,10 @@ export class VaultAIAssistantView extends ItemView {
         );
       }
     } finally {
-      this.activeAbortController = null;
-      this.activeAssistantMessageId = null;
+      if (this.activeAbortController === abortController) {
+        this.activeAbortController = null;
+        this.activeAssistantMessageId = null;
+      }
       this.render();
     }
   }
@@ -1797,9 +1857,9 @@ export class VaultAIAssistantView extends ItemView {
 
     const messageId = this.activeAssistantMessageId;
     this.activeAbortController.abort();
-    await this.plugin.chatStore.stopAssistantMessage(messageId);
     this.activeAbortController = null;
     this.activeAssistantMessageId = null;
+    await this.plugin.chatStore.stopAssistantMessage(messageId);
     this.render();
   }
 

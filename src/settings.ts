@@ -449,7 +449,9 @@ export class VaultAIAssistantSettingTab extends PluginSettingTab {
 
     new Setting(this.containerEl)
       .setName("Provider diagnostics")
-      .setDesc("Write diagnostic metadata for provider requests and streams.")
+      .setDesc(
+        "When enabled, creates one redacted diagnostic log file per request in your vault. High-volume stream events are summarized."
+      )
       .addToggle((toggle) => {
         toggle
           .setValue(this.plugin.settings.diagnosticLoggingEnabled)
